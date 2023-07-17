@@ -1,6 +1,6 @@
 # SLUSD API
 
-Basic REST api for SLUSD data requests
+FastAPI REST api for SLUSD data requests
 
 ## TODO
 - [ ] Setup Security

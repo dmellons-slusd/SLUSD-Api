@@ -1,1 +1,0 @@
-select * from stu where id = {id}

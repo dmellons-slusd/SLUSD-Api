@@ -1,0 +1,6 @@
+*.pyc
+__pycache__/
+venv/
+.env
+db_users.py
+get_password_hash.py

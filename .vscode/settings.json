@@ -1,0 +1,36 @@
+{
+    "sqltools.connections": [
+        {
+            "mssqlOptions": {
+                "appName": "SQLTools",
+                "useUTC": true,
+                "encrypt": true
+            },
+            "previewLimit": 50,
+            "server": "do-db1",
+            "port": 1433,
+            "driver": "MSSQL",
+            "name": "Aeries Master",
+            "group": "Aeries",
+            "database": "master",
+            "username": "dmellonssa",
+            "password": "4BUTt5RlsG2W9taMfwnSa2"
+        },
+        {
+            "mssqlOptions": {
+                "appName": "SQLTools",
+                "useUTC": true,
+                "encrypt": true
+            },
+            "previewLimit": 50,
+            "server": "do-db1",
+            "port": 1433,
+            "driver": "MSSQL",
+            "name": "Aeries 2023-2024",
+            "group": "Aeries",
+            "database": "DST23000SLUSD",
+            "username": "dmellonssa",
+            "password": "4BUTt5RlsG2W9taMfwnSa2"
+        }
+    ]
+}

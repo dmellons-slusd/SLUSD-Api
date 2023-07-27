@@ -1,1 +1,5 @@
-select * from stu where id = {id}
+select *
+from stu 
+where 1=1
+and id = {id}
+and del = 0

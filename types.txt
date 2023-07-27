@@ -1,0 +1,5 @@
+id: int
+sc: int
+fn: str
+ln: str
+gr: int

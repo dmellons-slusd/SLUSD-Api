@@ -17,4 +17,4 @@ fi
 
 
 
-uvicorn "$server_file:app" " --host 0.0.0.0" " $reload"
+uvicorn "$server_file:app" --host 0.0.0.0 $reload

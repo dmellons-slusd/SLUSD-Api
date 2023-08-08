@@ -12,7 +12,8 @@ def get_token(url:str, username:str, password:str):
 def get_endpoint_types(url:str, token:Token, nonetype_override: str or None = any) -> None or dict:
     headers = {'Authorization': 'Bearer ' + token.access_token}
     response = requests.get(url, headers=headers)
-    data = response.json()
+    data = response.json()[0]
+    print(data)
     types = []
     manual_types = []
     for key, value in data.items():
@@ -52,7 +53,7 @@ def main():
     base_url = 'http://localhost:8000'
     token = get_token(f'{base_url}/token/', 'app1','Money2020!')
     print(token)
-    types = get_endpoint_types(f'{base_url}/aeries/student/99939/', token, nonetype_override='int')
+    types = get_endpoint_types(f'{base_url}/schools/6', token, nonetype_override='int')
     print(types[0])
 
 

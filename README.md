@@ -12,3 +12,5 @@ FastAPI automatically documents API endpoints. Docs can be found here -> [SLUSD 
 - [ ] Setup CORS policy as needed
 - [ ] Pull in response types from slusdlib.slusdtypes
 - [ ] Branch API endpoints per application (Aeries, Escape, etc)
+- [ ] Write endpoints to write to custom Aeries tables
+    - [ ] Need data requirements

@@ -1,15 +1,16 @@
 from db_users import db
 from decouple import config
-from typing import List, Union
+from typing import List, Literal, Union
 from fastapi import Depends, FastAPI, HTTPException, status, Request
 from fastapi.security import OAuth2PasswordBearer, OAuth2PasswordRequestForm
 from fastapi.responses import Response, JSONResponse
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 from datetime import datetime, timedelta
 from jose import JWTError, jwt
 from passlib.context import CryptContext
 from fastapi.middleware.cors import CORSMiddleware
 from slusd_api_types import Student, StudentTest , School
+from sqlalchemy import text
 from json import loads
 from slusdlib import aeries, core
 import pandas as pd
@@ -23,7 +24,24 @@ ACCESS_TOKEN_EXPIRE_MINUTES = int(config("ACCESS_TOKEN_EXPIRE_MINUTES"))
 ##
 # Moved to slusd_api_types.py
 
-    
+##
+# Request Classes
+##
+
+class SUIA_Body(BaseModel):
+    ID: int
+    SD: Union[str, datetime]
+    ADSQ: int
+    INV: Literal['ACAD','RESO','TUPE']
+
+class SUIA_Table(BaseModel):
+    ID: int
+    SD: Union[str,datetime]
+    ADSQ: int #= Field("Assertive Discipline Sequence refrence")
+    SQ: Union[int,None] = None
+    INV: Literal['ACAD','RESO','TUPE']
+    DEL: bool = 0
+    DTS: datetime = datetime.now().strftime('YYYY-mm-ddTHH:MM:SS')    
 
 
 ##
@@ -75,6 +93,14 @@ app.add_middleware(
 ##
 # Helper functoins
 ##
+
+def get_next_SQIA_sq(id:int, cnxn) -> int:
+    sql = sql_obj.SUIA_table_sequence.format(id=id)
+    data = pd.read_sql(sql, cnxn)
+    if data.empty: return 1
+    return data.sq.values[0]+1
+
+
 def verify_password(plain_password, hashed_password):
     return pwd_context.verify(plain_password, hashed_password)
 
@@ -151,6 +177,48 @@ async def read_users_me(current_user: User = Depends(get_current_active_user)):
 @app.get("/test/{id}/")
 async def test(id: int):
     return {"message": "Hello World", "id": id}
+
+@app.post("/aeries/SUIA", response_model=None)
+async def insert_SUIA_row(data:SUIA_Body, auth = Depends(get_auth)):
+    cnxn = aeries.get_aeries_cnxn(access_level='w')
+    now = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+    if 'T' not in data.SD: data.SD = data.SD+'T00:00:00'
+    if data.SQ is None : data.SQ = get_next_SQIA_sq(data.ID, cnxn)
+    post_data:SUIA_Table = SUIA_Table(
+        ID=data.ID,
+        SQ=data.SQ,
+        ADSQ=data.ADSQ,
+        INV=data.INV,
+        SD=data.SD,
+        DEL=0,
+        DTS=now
+    )
+    sql = sql_obj.insert_into_SUIA_table.format(
+        ID=post_data.ID,
+        SQ=post_data.SQ,
+        ADSQ=post_data.ADSQ,
+        INV=post_data.INV,
+        SD=post_data.SD,
+        DEL=0,
+        DTS=post_data.DTS
+    )
+    try: 
+        with cnxn.connect() as conn:
+            conn.execute(text(sql))
+            conn.commit()
+        content = {
+            "status":"SUCCESS",
+            "message": f"Inserted new row into SUIA for student ID#{data.ID} @ SQ {data.SQ}"
+        }
+        return JSONResponse(content=content, status_code=200)
+     
+    except Exception as e:
+        print(e)
+        content = {
+            "error": f"{e}"
+        }
+        return JSONResponse(content=content, status_code=500)
+
 
 @app.get("/aeries/student/{id}/", response_model=Student)
 async def get_student(id: int, auth = Depends(get_auth)):

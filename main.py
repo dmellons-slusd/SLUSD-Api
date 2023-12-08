@@ -1,7 +1,7 @@
 from db_users import db
 from decouple import config
 from typing import List, Literal, Union
-from fastapi import Depends, FastAPI, HTTPException, status, Request
+from fastapi import Depends, FastAPI, HTTPException, status, Request, Body
 from fastapi.security import OAuth2PasswordBearer, OAuth2PasswordRequestForm
 from fastapi.responses import Response, JSONResponse
 from pydantic import BaseModel, Field
@@ -30,29 +30,37 @@ ACCESS_TOKEN_EXPIRE_MINUTES = int(config("ACCESS_TOKEN_EXPIRE_MINUTES"))
 
 class SUIA_Body(BaseModel):
     ID: int
-    SD: Union[str, datetime]
+    SD: str
     ADSQ: int
     INV: Literal['ACAD','RESO','TUPE']
 
+class DeleteSUIA(BaseModel):
+    ID: int
+    SQ: int
+
 class SUIA_Table(BaseModel):
     ID: int
-    SD: Union[str,datetime]
-    ADSQ: int #= Field("Assertive Discipline Sequence refrence")
-    SQ: Union[int,None] = None
+    SD: str
+    ADSQ: int
+    SQ: int
     INV: Literal['ACAD','RESO','TUPE']
-    DEL: bool = 0
-    DTS: datetime = datetime.now().strftime('YYYY-mm-ddTHH:MM:SS')    
+    DEL: bool
+    DTS: datetime
 
 
 ##
 # Internal auth classes
 ##
 class Token(BaseModel):
-    access_token: str
+    token: str
     token_type: str
 
 class TokenData(BaseModel):
     username: str or None = None
+
+class UserCredentials(BaseModel):
+    username: str
+    password: str
 
 class User(BaseModel):
     username: str
@@ -63,6 +71,9 @@ class User(BaseModel):
 class UserInDB(User):
     hashed_password: str
 
+class BaseResponse(BaseModel):
+    status: str
+    message: str
 ##
 # Server Context
 ##
@@ -152,8 +163,14 @@ async def get_current_active_user(current_user: User = Depends(get_auth)):
 ##
 # API Endpoints / Routes
 ##
-@app.post("/token/", response_model=Token)
-async def login_for_access_token(form_data: OAuth2PasswordRequestForm = Depends()):
+
+# @app.exception_handler(Exception)
+# async def exception_handler(request: Request, exc: Exception):
+#     error_message = f"Unexpected error occured: {exc}"
+#     return JSONResponse(status_code=500, content={"detail": error_message})
+
+@app.post("/token/", response_model=Token, tags=["Auth"])
+async def login_for_access_token(form_data: UserCredentials):
     user = authenticate_user(db, form_data.username, form_data.password)
     if not user:
         raise HTTPException(
@@ -163,30 +180,31 @@ async def login_for_access_token(form_data: OAuth2PasswordRequestForm = Depends(
             )
     access_token_expires = timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES)
     access_token = create_access_token(data={"sub": user.username}, expires_delta=access_token_expires)
-    return {"access_token": access_token, "token_type": "bearer"}
+    return {"token": access_token, "token_type": "bearer"}
 
-# @app.exception_handler(Exception)
-# async def exception_handler(request: Request, exc: Exception):
-#     error_message = f"Unexpected error occured: {exc}"
-#     return JSONResponse(status_code=500, content={"detail": error_message})
+@app.get("/aeries/SUIA/",  tags=["SUIA Endpoints"])
+async def get_all_suia_records(auth = Depends(get_auth)):
+    cnxn = aeries.get_aeries_cnxn()
+    sql = sql_obj.get_all_suia_records
+    ret = pd.read_sql(sql, cnxn).to_dict(orient='records')
+    return ret
 
-@app.get("/users/me/", response_model=User)
-async def read_users_me(current_user: User = Depends(get_current_active_user)):
-    return current_user
+@app.get("/aeries/SUIA/{id}",  tags=["SUIA Endpoints"])
+async def get_student_suia_records(id:int,auth = Depends(get_auth)):
+    cnxn = aeries.get_aeries_cnxn()
+    sql = sql_obj.get_student_suia_records.format(id=id)
+    ret = pd.read_sql(sql, cnxn).to_dict(orient='records')
+    return ret
 
-@app.get("/test/{id}/")
-async def test(id: int):
-    return {"message": "Hello World", "id": id}
-
-@app.post("/aeries/SUIA", response_model=None)
+@app.post("/aeries/SUIA/", response_model=BaseResponse, tags=["SUIA Endpoints"])
 async def insert_SUIA_row(data:SUIA_Body, auth = Depends(get_auth)):
     cnxn = aeries.get_aeries_cnxn(access_level='w')
     now = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
     if 'T' not in data.SD: data.SD = data.SD+'T00:00:00'
-    if data.SQ is None : data.SQ = get_next_SQIA_sq(data.ID, cnxn)
+    sq = get_next_SQIA_sq(data.ID, cnxn)
     post_data:SUIA_Table = SUIA_Table(
         ID=data.ID,
-        SQ=data.SQ,
+        SQ=sq,
         ADSQ=data.ADSQ,
         INV=data.INV,
         SD=data.SD,
@@ -208,7 +226,7 @@ async def insert_SUIA_row(data:SUIA_Body, auth = Depends(get_auth)):
             conn.commit()
         content = {
             "status":"SUCCESS",
-            "message": f"Inserted new row into SUIA for student ID#{data.ID} @ SQ {data.SQ}"
+            "message": f"Inserted new row into SUIA for student ID#{data.ID} @ SQ {post_data.SQ}"
         }
         return JSONResponse(content=content, status_code=200)
      
@@ -219,8 +237,35 @@ async def insert_SUIA_row(data:SUIA_Body, auth = Depends(get_auth)):
         }
         return JSONResponse(content=content, status_code=500)
 
+@app.delete("/aeries/SUIA", response_model=BaseResponse, tags=["SUIA Endpoints"])
+async def delete_SUIA_row(body:DeleteSUIA, auth = Depends(get_auth)):
+    cnxn = aeries.get_aeries_cnxn(access_level='w')
+    delete_sql = sql_obj.delete_from_SUIA_table.format(id=body.ID, sq=body.SQ)
+    find_sql = sql_obj.find_SUIA_row.format(id=body.ID, sq=body.SQ)
+    try:
+        if pd.read_sql(find_sql, cnxn).empty:
+            content = {
+                "status":"Row Not Found",
+                "message": f"No SUIA row found with ID#{body.ID} and SQ {body.SQ}"
+            }
+            return JSONResponse(content=content, status_code=404)
+        with cnxn.connect() as conn:
+            conn.execute(text(delete_sql))
+            conn.commit()
+        content = {
+            "status":"SUCCESS",
+            "message": f"Deleted row from SUIA for student ID#{body.ID} @ SQ {body.SQ}"
+        }
+        return JSONResponse(content=content, status_code=200)
+    except Exception as e:
+        print(e)
+        content = {
+            "error": f"{e}"
+        }
+        return JSONResponse(content=content, status_code=500)
+    
 
-@app.get("/aeries/student/{id}/", response_model=Student)
+@app.get("/aeries/student/{id}/", response_model=Student, tags=["Student Endoints"])
 async def get_student(id: int, auth = Depends(get_auth)):
     cnxn = aeries.get_aeries_cnxn()
     sql = sql_obj.student_test.format(id=id)
@@ -228,17 +273,7 @@ async def get_student(id: int, auth = Depends(get_auth)):
     ret = loads(data.to_json(orient="records"))[0]
     return ret
 
-@app.get("/test/student/{id}/", response_model=StudentTest)
-async def get_student_test(id: int, auth = Depends(get_auth)):
-    """!! Not yet working !!
-    """
-    cnxn = aeries.get_aeries_cnxn()
-    sql = sql_obj.student.format(id=id)
-    data = pd.read_sql(sql, cnxn)   
-    ret:Student = loads(data.to_json(orient="records"))[0]
-    return ret
-
-@app.get("/schools/", response_model=List[School])
+@app.get("/schools/", response_model=List[School], tags=["School Endpoints"])
 async def get_all_schools_info():
     """List of basic school data for all schools"""
     cnxn = aeries.get_aeries_cnxn()
@@ -247,7 +282,7 @@ async def get_all_schools_info():
     ret = loads(data.to_json(orient="records"))
     return ret
 
-@app.get("/schools/{sc}", response_model=School)
+@app.get("/schools/{sc}", response_model=School, tags=["School Endpoints"])
 async def get_single_school_info(sc:int):
     cnxn = aeries.get_aeries_cnxn()
     sql = sql_obj.locations
@@ -255,5 +290,9 @@ async def get_single_school_info(sc:int):
     data = pd.read_sql(sql, cnxn)
     ret:School = loads(data.to_json(orient="records"))[0]
     return ret
+
+@app.get("/users/me/", response_model=User, tags=["Testing"])
+async def read_users_me(current_user: User = Depends(get_current_active_user)):
+    return current_user
 
 

@@ -283,7 +283,7 @@ async def update_SUIA_row(body:SUIAUpdade, auth=Depends(get_auth)):
                 "status": "FAIL",
                 "message": f"No SQ# {body.SQ} for ID# {body.ID}"
             }
-            return JSONResponse(content)
+            return JSONResponse(content, status_code=200)
         old_row['SD'] = old_row['SD'].dt.strftime('%Y-%m-%d')
         old_row['DTS'] = old_row['DTS'].dt.strftime('%Y-%m-%d %H:%M:%S')
         old_row = old_row.to_dict('records')[0]
@@ -294,6 +294,7 @@ async def update_SUIA_row(body:SUIAUpdade, auth=Depends(get_auth)):
         sq = body.SQ
         id = body.ID
         update_sql = sql_obj.update_SUIA.format(updates=updates, sq=sq, id=id)
+        # print('sql', update_sql)
         with cnxn.connect() as conn:
             conn.execute(text(update_sql))
             conn.commit()

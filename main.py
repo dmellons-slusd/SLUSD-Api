@@ -1,9 +1,10 @@
 from db_users import db
 from decouple import config
+import requests
 from typing import List, Literal, Union
 from fastapi import Depends, FastAPI, HTTPException, status, Request, Body
 from fastapi.security import OAuth2PasswordBearer, OAuth2PasswordRequestForm
-from fastapi.responses import Response, JSONResponse
+from fastapi.responses import JSONResponse
 from pydantic import BaseModel, Field
 from datetime import datetime, timedelta
 from jose import JWTError, jwt
@@ -33,8 +34,15 @@ class SUIA_Body(BaseModel):
     SD: str
     ADSQ: int
     INV: Literal['ACAD','RESO','TUPE']
+    
+class SUIAUpdade(BaseModel):
+    ID: int
+    SQ: int
+    SD: Union[str,None] = None
+    ADSQ: Union[int,None] = None
+    INV: Union[Literal['ACAD','RESO','TUPE'],None] = None
 
-class DeleteSUIA(BaseModel):
+class SUIADelete(BaseModel):
     ID: int
     SQ: int
 
@@ -45,7 +53,7 @@ class SUIA_Table(BaseModel):
     SQ: int
     INV: Literal['ACAD','RESO','TUPE']
     DEL: bool
-    DTS: datetime
+    DTS: datetime = datetime.now()
 
 
 ##
@@ -104,6 +112,16 @@ app.add_middleware(
 ##
 # Helper functoins
 ##
+
+def create_sql_update(body:dict, ignore_keys:List[str]=['ID', 'SQ', 'DEL', 'DTS']) -> str:
+    statements = []
+    now = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+    for key, value in body:
+        if key in ignore_keys or value is None : continue
+        statement = f"{key} = '{value}'"
+        statements.append(statement)
+    return f"SET {', '.join(statements)} , DTS ='{now}'"
+
 
 def get_next_SQIA_sq(id:int, cnxn) -> int:
     sql = sql_obj.SUIA_table_sequence.format(id=id)
@@ -170,7 +188,7 @@ async def get_current_active_user(current_user: User = Depends(get_auth)):
 #     return JSONResponse(status_code=500, content={"detail": error_message})
 
 @app.post("/token/", response_model=Token, tags=["Auth"])
-async def login_for_access_token(form_data: UserCredentials):
+async def login_for_access_token(form_data:UserCredentials):
     user = authenticate_user(db, form_data.username, form_data.password)
     if not user:
         raise HTTPException(
@@ -187,14 +205,31 @@ async def get_all_suia_records(auth = Depends(get_auth)):
     cnxn = aeries.get_aeries_cnxn()
     sql = sql_obj.get_all_suia_records
     ret = pd.read_sql(sql, cnxn).to_dict(orient='records')
-    return ret
+    return JSONResponse(content=ret, status_code=200)
 
-@app.get("/aeries/SUIA/{id}",  tags=["SUIA Endpoints"])
-async def get_student_suia_records(id:int,auth = Depends(get_auth)):
+@app.get("/aeries/SUIA/{id}/",  tags=["SUIA Endpoints"])
+async def get_single_student_suia_records(id:int, auth = Depends(get_auth)):
     cnxn = aeries.get_aeries_cnxn()
     sql = sql_obj.get_student_suia_records.format(id=id)
-    ret = pd.read_sql(sql, cnxn).to_dict(orient='records')
-    return ret
+    try:
+        ret = pd.read_sql(sql, cnxn)
+        if ret.empty : 
+            content = {
+            "status":"SUCCESS",
+            "message":f"No rows found for ID# {id}"
+            }
+            return JSONResponse(content=content, status_code=200)
+        ret['SD'] = ret['SD'].dt.strftime('%Y-%m-%d')
+        ret['DTS'] = ret['DTS'].dt.strftime('%Y-%m-%d %H:%M:%S')
+
+    except Exception as e:
+        content = {
+            "status":"Error",
+            "message":f"Error:{e}"
+            }
+        return JSONResponse(content=content, status_code=500)
+    print(ret)
+    return JSONResponse(content=ret.to_dict('records'), status_code=200)
 
 @app.post("/aeries/SUIA/", response_model=BaseResponse, tags=["SUIA Endpoints"])
 async def insert_SUIA_row(data:SUIA_Body, auth = Depends(get_auth)):
@@ -236,9 +271,48 @@ async def insert_SUIA_row(data:SUIA_Body, auth = Depends(get_auth)):
             "error": f"{e}"
         }
         return JSONResponse(content=content, status_code=500)
+    
+@app.put("/aeries/SUIA/", response_model=BaseResponse, tags=["SUIA Endpoints"])
+async def update_SUIA_row(body:SUIAUpdade, auth=Depends(get_auth)):
+    try:
+        cnxn = aeries.get_aeries_cnxn(access_level='w')
+        sql_row = sql_obj.find_SUIA_row.format(id=body.ID, sq=body.SQ)
+        old_row = pd.read_sql(sql_row, cnxn)
+        if old_row.empty:
+            content={
+                "status": "FAIL",
+                "message": f"No SQ# {body.SQ} for ID# {body.ID}"
+            }
+            return JSONResponse(content)
+        old_row['SD'] = old_row['SD'].dt.strftime('%Y-%m-%d')
+        old_row['DTS'] = old_row['DTS'].dt.strftime('%Y-%m-%d %H:%M:%S')
+        old_row = old_row.to_dict('records')[0]
+        new_row = old_row
+        for key, value in body:
+            if value: new_row[key] = value
+        updates = create_sql_update(body, ignore_keys=['ID', 'SQ', 'DEL', 'DTS'])
+        sq = body.SQ
+        id = body.ID
+        update_sql = sql_obj.update_SUIA.format(updates=updates, sq=sq, id=id)
+        with cnxn.connect() as conn:
+            conn.execute(text(update_sql))
+            conn.commit()
 
-@app.delete("/aeries/SUIA", response_model=BaseResponse, tags=["SUIA Endpoints"])
-async def delete_SUIA_row(body:DeleteSUIA, auth = Depends(get_auth)):
+
+        content = {
+            'status':'SUCCESS',
+            'message': f'Updated row ID={id} SQ={sq} with values {updates}'
+        }
+        return JSONResponse(content=content, status_code=200)
+    except Exception as e:
+        content = {
+            'status': 'FAIL',
+            'message': f'ERROR: {e}'
+        }
+        return JSONResponse(content=content, status_code=500)
+
+@app.delete("/aeries/SUIA/", response_model=BaseResponse, tags=["SUIA Endpoints"])
+async def delete_SUIA_row(body:SUIADelete, auth = Depends(get_auth)):
     cnxn = aeries.get_aeries_cnxn(access_level='w')
     delete_sql = sql_obj.delete_from_SUIA_table.format(id=body.ID, sq=body.SQ)
     find_sql = sql_obj.find_SUIA_row.format(id=body.ID, sq=body.SQ)
@@ -282,7 +356,7 @@ async def get_all_schools_info():
     ret = loads(data.to_json(orient="records"))
     return ret
 
-@app.get("/schools/{sc}", response_model=School, tags=["School Endpoints"])
+@app.get("/schools/{sc}/", response_model=School, tags=["School Endpoints"])
 async def get_single_school_info(sc:int):
     cnxn = aeries.get_aeries_cnxn()
     sql = sql_obj.locations

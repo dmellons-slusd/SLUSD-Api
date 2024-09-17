@@ -1,0 +1,31 @@
+INSERT INTO ADS (
+    PID,
+    SQ,
+    SCL,
+    CD,
+    GR,
+    UID,
+    UUN,
+    IID,
+    SRF,
+    DEL,
+    DT,
+    DY:,
+    HR,
+    TN,
+) VALUES (
+    '{PID}',
+    '{SQ}',
+    '{SCL}',
+    '{CD}',
+    '{GR}',
+    '{UID}',
+    '{UUN}',
+    '{IID}',
+    0,
+    0,
+    GETDATE()
+    0,
+    0,
+    0
+)

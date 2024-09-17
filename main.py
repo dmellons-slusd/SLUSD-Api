@@ -54,6 +54,117 @@ class SUIA_Table(BaseModel):
     INV: Literal['ACAD','RESO','TUPE']
     DEL: bool
     DTS: datetime = datetime.now()
+class ADS_POST_Body(BaseModel):
+    PID: int = Field(..., description='Student ID')
+    SQ: int = Field(..., description='Sequence') # Sequence
+    SCL: int = Field(..., description='School ID') # School ID
+    CD: str = Field(..., description='Disposition Code') # Code
+    GR: int = Field(..., description='Grade') # Grade
+    UID: int = Field(..., description='Update User ID') # Update User ID
+    UUN: str = Field(..., description='Update User Name') # Update User Name
+    IID: int = 0
+    SRF: int = 0
+    DEL: int = 0
+    DT: datetime = datetime.now()
+    DY: int = 0
+    HR: int = 0
+    TN: int = 0
+
+class DSP_POST_Body(BaseModel):
+    PID: int = Field(..., description='Student ID')
+    SQ: int = Field(..., description='Sequence') # Sequence
+    SQ1: int = Field( default=0, description='Disposition Sequence') # Sequence
+    SCL: int = Field(..., description='School ID') # School ID
+    CD: str = Field(..., description='Disposition Code') # Code
+    GR: int = Field(..., description='Grade') # Grade
+    IID: int = Field(..., description='Update User ID') # Update User ID
+    UUN: str = Field(..., description='Update User Name') # Update User Name
+    SRF: int = 0
+    DEL: int = 0
+    DT: datetime = datetime.now()
+    DY: int = 0
+    HR: int = 0
+    TN: int = 0
+
+
+class ADS_Table(BaseModel):
+    PID: int
+    DT: datetime
+    CD: str
+    DS: str
+    DY: int
+    HR: int
+    DD: datetime
+    ED: datetime
+    DM: int
+    TG: str
+    CO: str
+    TN: int
+    SQ: int
+    RF: str
+    CD2: str
+    CD3: str
+    CD4: str
+    CD5: str
+    ST: str
+    PL: str
+    RST: str
+    RD: datetime
+    RS: str
+    SCL: int
+    INI: str
+    LCN: str
+    ET: datetime
+    AXT: str
+    WT: str
+    DS2: str
+    DS3: str
+    GR: int
+    PIN: str
+    ND1: datetime
+    ND2: datetime
+    ND3: datetime
+    ND4: datetime
+    NY1: str
+    NY2: str
+    NY3: str
+    NY4: str
+    RL: str
+    FDD: datetime
+    SXD: datetime
+    LNF: str
+    SSE: str
+    SHD: datetime
+    U1: str
+    U2: str
+    U3: str
+    U4: str
+    U5: str
+    U6: str
+    U7: str
+    U8: str
+    CO2: str
+    AA: str
+    ISI: str
+    IID: int
+    S54: str
+    PM: str
+    SR: bool
+    PI1: str
+    PI2: str
+    PI3: str
+    RR: str
+    DE: str
+    IDT: datetime
+    IUI: int
+    IUN: str
+    UUI: int
+    UUN: str
+    SRF: int
+    SSP: str
+    SDT: datetime
+    DEL: bool
+    DTS: datetime
 
 
 ##
@@ -131,6 +242,11 @@ def get_next_SQIA_sq(id:int, cnxn) -> int:
     if data.empty: return 1
     return data.sq.values[0]+1
 
+def get_next_ADS_sq(id:int, cnxn) -> int:
+    sql = sql_obj.ADS_table_sequence.format(id=id)
+    data = pd.read_sql(sql, cnxn)
+    if data.empty: return 1
+    return data.sq.values[0]+1
 
 def verify_password(plain_password, hashed_password):
     return pwd_context.verify(plain_password, hashed_password)
@@ -340,7 +456,47 @@ async def delete_SUIA_row(body:SUIADelete, auth = Depends(get_auth)):
             "error": f"{e}"
         }
         return JSONResponse(content=content, status_code=500)
-    
+
+@app.post("/aeries/ADS/", response_model=BaseResponse, tags=["ADS Endpoints"])
+async def insert_ADS_row(data:ADS_POST_Body, auth = Depends(get_auth)):
+    cnxn = aeries.get_aeries_cnxn(access_level='w')
+    now = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+    print(f'{data = }')
+    if type (data.SDT) is not datetime : data.SDT = f'{data.SDT.year()}-{data.SDT.month()}-{data.SDT.day()}T00:00:00'
+    sq = get_next_ADS_sq(data.PID, cnxn)
+    # return JSONResponse(content=str(sq), status_code=200)
+    sql = sql_obj.insert_into_ADS_table.format(
+        PID=data.PID,
+        SQ=sq,
+        
+        
+    )
+    # sql = sql_obj.insert_into_ADS_table.format(
+    #     ID=post_data.ID,
+    #     SQ=post_data.SQ,
+    #     ADSQ=post_data.ADSQ,
+    #     INV=post_data.INV,
+    #     SD=post_data.SD,
+    #     DEL=0,
+    #     DTS=post_data.DTS
+    # )
+    try: 
+        with cnxn.connect() as conn:
+            conn.execute(text(sql))
+            conn.commit()
+        content = {
+            "status":"SUCCESS",
+            "message": f"Inserted new row into ADS for student ID#{data.ID} @ SQ {post_data.SQ}"
+        }
+        return JSONResponse(content=content, status_code=200)
+     
+    except Exception as e:
+        print(e)
+        content = {
+            "error": f"{e}"
+        }
+        return JSONResponse(content=content, status_code=500)
+      
 
 @app.get("/aeries/student/{id}/", response_model=Student, tags=["Student Endoints"])
 async def get_student(id: int, auth = Depends(get_auth)):

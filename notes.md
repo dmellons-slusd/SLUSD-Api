@@ -1,306 +1,94 @@
-# ADS Create Query
-INSERT INTO [ADS] (
-[PID],
-[SQ],
-[DT],
-[CD],
-[DS],
-[DY],
-[HR],
-[DD],
-[ED],
-[DM],
-[TG],
-[CO],
-[TN],
-[RF],
-[CD2],
-[CD3],
-[CD4],
-[CD5],
-[ST],
-[PL],
-[RST],
-[RD],
-[RS],
-[SCL],
-[INI],
-[LCN],
-[ET],
-[AXT],
-[WT],
-[DS2],
-[DS3],
-[GR],
-[PIN],
-[ND1],
-[ND2],
-[ND3],
-[ND4],
-[NY1],
-[NY2],
-[NY3],
-[NY4],
-[RL],
-[FDD],
-[SXD],
-[LNF],
-[SSE],
-[SHD],
-[U1],
-[U2],
-[U3],
-[U4],
-[U5],
-[U6],
-[U7],
-[U8],
-[CO2],
-[AA],
-[ISI],
-[IID],
-[PM],
-[S54],
-[SR],
-[PI1],
-[PI2],
-[PI3],
-[RR],
-[DE],
-[SRF],
-[SSP],
-[SDT],
-[DEL],
-[IDT],
-[IUI],
-[IUN],
-[UUI],
-[UUN],
-[DTS]) 
-Values(
-@PID,
-@SQ,
-@DT,
-@CD,
-@DS,
-@DY,
-@HR,
-@DD,
-@ED,
-@DM,
-@TG,
-@CO,
-@TN,
-@RF,
-@CD2,
-@CD3,
-@CD4,
-@CD5,
-@ST,
-@PL,
-@RST,
-@RD,
-@RS,
-@SCL,
-@INI,
-@LCN,
-@ET,
-@AXT,
-@WT,
-@DS2,
-@DS3,
-@GR,
-@PIN,
-@ND1,
-@ND2,
-@ND3,
-@ND4,
-@NY1,
-@NY2,
-@NY3,
-@NY4,
-@RL,
-@FDD,
-@SXD,
-@LNF,
-@SSE,
-@SHD,
-@U1,
-@U2,
-@U3,
-@U4,
-@U5,
-@U6,
-@U7,
-@U8,
-@CO2,
-@AA,
-@ISI,
-@IID,
-@PM,
-@S54,
-@SR,
-@PI1,
-@PI2,
-@PI3,
-@RR,
-@DE,
-@SRF,
-@SSP,
-@SDT,
-@DEL,
-GetDate(),
-@UID,
-@UUN,
-@UID,
-@UUN,
-GetDate()
-
-@PID int,
-@SQ smallint,
-@DT datetime,
-@CD nvarchar(4000),
-@DS nvarchar(4000),
-@DY int,
-@HR int,
-@DD nvarchar(4000),
-@ED nvarchar(4000),
-@DM int,
-@TG nvarchar(4000),
-@CO nvarchar(4000),
-@TN int,
-@RF nvarchar(4000),
-@CD2 nvarchar(4000),
-@CD3 nvarchar(4000),
-@CD4 nvarchar(4000),
-@CD5 nvarchar(4000),
-@ST nvarchar(4000),
-@PL nvarchar(4000),
-@RST nvarchar(4000),
-@RD nvarchar(4000),
-@RS nvarchar(4000),
-@SCL int,
-@INI nvarchar(4000),
-@LCN nvarchar(4000),
-@ET nvarchar(4000),
-@AXT nvarchar(4000),
-@WT nvarchar(4000),
-@DS2 nvarchar(4000),
-@DS3 nvarchar(4000),
-@GR smallint,
-@PIN nvarchar(4000),
-@ND1 nvarchar(4000),
-@ND2 nvarchar(4000),
-@ND3 nvarchar(4000),
-@ND4 nvarchar(4000),
-@NY1 nvarchar(4000),
-@NY2 nvarchar(4000),
-@NY3 nvarchar(4000),
-@NY4 nvarchar(4000),
-@RL nvarchar(4000),
-@FDD nvarchar(4000),
-@SXD nvarchar(4000),
-@LNF nvarchar(4000),
-@SSE nvarchar(4000),
-@SHD nvarchar(4000),
-@U1 nvarchar(4000),
-@U2 nvarchar(4000),
-@U3 nvarchar(4000),
-@U4 nvarchar(4000),
-@U5 nvarchar(4000),
-@U6 nvarchar(4000),
-@U7 nvarchar(4000),
-@U8 nvarchar(4000),
-@CO2 nvarchar(4000),
-@AA nvarchar(4000),
-@ISI nvarchar(4000),
-@IID int,
-@PM nvarchar(4000),
-@S54 nvarchar(4000),
-@SR bit,
-@PI1 nvarchar(4000),
-@PI2 nvarchar(4000),
-@PI3 nvarchar(4000),
-@RR nvarchar(4000),
-@DE nvarchar(4000),
-@SRF int,
-@SSP nvarchar(4000),
-@SDT nvarchar(4000),
-@DEL bit,
-@UID bigint,
-@UUN nvarchar(15),
 
 
-@PID=102789,
-@SQ=44,
-@DT='2024-09-17 13:21:05.447',
-@CD=N'',
-@DS=N'',
-@DY=0,
-@HR=0,
-@DD=NULL,
-@ED=NULL,
-@DM=0,
-@TG=N'',
-@CO=N'',
-@TN=0,
-@RF=N'',
-@CD2=N'',
-@CD3=N'',
-@CD4=N'',
-@CD5=N'',
-@ST=N'',
-@PL=N'',
-@RST=N'',
-@RD=NULL,
-@RS=N'',
-@SCL=11,
-@INI=N'',
-@LCN=N'',
-@ET=NULL,
-@AXT=N'',
-@WT=N'',
-@DS2=N'',
-@DS3=N'',
-@GR=7,
-@PIN=N'',
-@ND1=NULL,
-@ND2=NULL,
-@ND3=NULL,
-@ND4=NULL,
-@NY1=N'',
-@NY2=N'',
-@NY3=N'',
-@NY4=N'',
-@RL=N'',
-@FDD=NULL,
-@SXD=NULL,
-@LNF=N'',
-@SSE=N'',
-@SHD=NULL,
-@U1=N'',
-@U2=N'',
-@U3=N'',
-@U4=N'',
-@U5=N'',
-@U6=N'',
-@U7=N'',
-@U8=N'',
-@CO2=N'',
-@AA=N'',
-@ISI=N'',
-@IID=0,
-@PM=N'',
-@S54=N'',
-@SR=0,
-@PI1=N'',
-@PI2=N'',
-@PI3=N'',
-@RR=N'',
-@DE=N'',
-@SRF=0,
-@SSP=N'',
-@SDT=NULL,
-@DEL=0,
-@UID=1948,
+
+INSERT INTO [DSP] ([PID]
+ [SQ]
+ [SQ1]
+ [DS]
+ [DY]
+ [HR]
+ [DD]
+ [ED]
+ [AA]
+ [PL]
+ [RS]
+ [RD]
+ [RST]
+ [RL]
+ [ST]
+ [IDY]
+ [IHR]
+ [IDD]
+ [IED]
+ [IRD]
+ [RDD]
+ [SA]
+ [DA]
+ [IC]
+ [DEL]
+ [IDT]
+ [IUI]
+ [IUN]
+ [UUI]
+ [UUN]
+ [DTS]) Values(@PID
+ @SQ
+ @SQ1
+ @DS
+ @DY
+ @HR
+ @DD
+ @ED
+ @AA
+ @PL
+ @RS
+ @RD
+ @RST
+ @RL
+ @ST
+ @IDY
+ @IHR
+ @IDD
+ @IED
+ @IRD
+ @RDD
+ @SA
+ @DA
+ @IC
+ @DEL
+ GetDate()
+ @UID
+ @UUN
+ @UID
+ @UUN
+ GetDate())'
+
+@PID=102789
+@SQ=44
+@SQ1=1
+@DS=N'DET'
+@DY=0
+@HR=0
+@DD=NULL
+@ED=NULL
+@AA=N'10'
+@PL=N''
+@RS=N''
+@RD=NULL
+@RST=N''
+@RL=N''
+@ST=N''
+@IDY=0
+@IHR=0
+@IDD=NULL
+@IED=NULL
+@IRD=NULL
+@RDD=N''
+@SA=N''
+@DA=NULL
+@IC=N''
+@DEL=0
+@UID=1948
 @UUN=N'lsimon@slusd.us'
+
+

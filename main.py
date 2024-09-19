@@ -59,12 +59,13 @@ class ADS_POST_Body(BaseModel):
     SCL: int = Field(..., description='School ID') # School ID
     CD: str = Field(..., description='Disposition Code') # Code
     GR: int = Field(..., description='Grade') # Grade
+    CO: str = Field(..., description='Comments')
 
 
 class DSP_POST_Body(BaseModel):
     PID: int = Field(..., description='Student ID')
-    # SQ: int = Field(..., description='Sequence') # Sequence
-    # SQ1: int = Field( default=0, description='Disposition Sequence') # Sequence
+    SQ: int = Field(..., description='ADS Sequence') # Sequence
+    # SQ1: int = Field( default=1, description='Disposition Sequence (restarts every ADS entry)') # Sequence
     # DS: str = Field(..., description='Disposition') # Disposition
 
 ##
@@ -127,6 +128,21 @@ app.add_middleware(
 ##
 
 def create_sql_update(body:dict, ignore_keys:List[str]=['ID', 'SQ', 'DEL', 'DTS']) -> str:
+    """
+    Create a SQL update statement from a dictionary of key-value pairs.
+
+    Parameters
+    ----------
+    body : dict
+        A dictionary of key-value pairs to update in the SQL table
+    ignore_keys : List[str], optional
+        A list of keys to ignore in the update statement, by default ['ID', 'SQ', 'DEL', 'DTS']
+
+    Returns
+    -------
+    str
+        The SQL update statement
+    """
     statements = []
     now = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
     for key, value in body:
@@ -137,41 +153,171 @@ def create_sql_update(body:dict, ignore_keys:List[str]=['ID', 'SQ', 'DEL', 'DTS'
 
 
 def get_next_SQIA_sq(id:int, cnxn) -> int:
+    """
+    Find the next sequence number in the SUIA table for a given student id.
+
+    Queries the SUIA table to find the highest sequence number for a given student id.
+    If no records are found, returns 1.
+
+    Parameters
+    ----------
+    id : int
+        The student id to query
+    cnxn : sqlalchemy.engine.Connection
+        The db connection to use
+
+    Returns
+    -------
+    int
+        The next sequence number
+    """
     sql = sql_obj.SUIA_table_sequence.format(id=id)
     data = pd.read_sql(sql, cnxn)
     if data.empty: return 1
     return data.sq.values[0]+1
 
 def get_next_ADS_sq(id:int, cnxn) -> int:
+    """
+    Find the next sequence number in the ADS table for a given student id.
+
+    Parameters
+    ----------
+    id : int
+        The student id to find the next sequence for
+    cnxn : sqlalchemy.engine.Connection
+        The database connection object
+
+    Returns
+    -------
+    int
+        The next sequence number to use for an ADS insert
+    """
     sql = sql_obj.ADS_table_sequence.format(id=id)
     data = pd.read_sql(sql, cnxn)
     if data.empty: return 1
     return data.sq.values[0]+1
 
-def get_next_DSP_sq(id:int, cnxn) -> int:
-    sql = sql_obj.DSP_table_sequence.format(id=id)
+def get_next_DSP_sq(id:int, sq:int, cnxn) -> int:
+    """
+    Find the next sequence number in the DSP table for a given student id and sequence.
+
+    Queries the DSP table to find the highest sequence number for a given student id and sequence.
+    If no records are found, returns 1.
+
+    Parameters
+    ----------
+    id : int
+        The student id to query
+    sq : int
+        The sequence to query
+    cnxn : sqlalchemy.engine.Connection
+        The db connection to use
+
+    Returns
+    -------
+    int
+        The next sequence number to use for a DSP insert
+    """
+    sql = sql_obj.DSP_table_sequence.format(id=id, sq=sq)
     data = pd.read_sql(sql, cnxn)
+    print(data)
     if data.empty: return 1 
-    return data.sq.values[0]+1
+    return data.sq1.values[0]+1 
 
 def verify_password(plain_password, hashed_password):
+    """
+    Verify a plaintext password against a hashed password
+
+    Parameters
+    ----------
+    plain_password : str
+        The plaintext password to verify
+    hashed_password : str
+        The hashed password to compare against
+
+    Returns
+    -------
+    bool
+        True if the password is valid, False otherwise
+    """
     return pwd_context.verify(plain_password, hashed_password)
 
 def get_password_hash(password):
+    """
+    Return a hashed version of the given plaintext password
+
+    Parameters
+    ----------
+    password : str
+        The plaintext password to hash
+
+    Returns
+    -------
+    str
+        The hashed password
+    """
     return pwd_context.hash(password)
 
 def get_user(db, username: str):
+    """
+    Find a user in the given database by username
+
+    Parameters
+    ----------
+    db : dict
+        The database to search in
+    username : str
+        The username to search for
+
+    Returns
+    -------
+    UserInDB or None
+        The user if found, None otherwise
+    """
     if username in db:
         user_dict = db[username]
         return UserInDB(**user_dict)
     
 def authenticate_user(db, username: str, password: str):
+    
+    """
+    Authenticate a user against the given database
+
+    Parameters
+    ----------
+    db : dict
+        The database to search in
+    username : str
+        The username to search for
+    password : str
+        The password to verify against
+
+    Returns
+    -------
+    UserInDB or False
+        The user if authenticated, False otherwise
+    """
     user = get_user(db, username)
     if not user: return False
     if not verify_password(password, user.hashed_password): return False
     return user
 
 def create_access_token(data: dict, expires_delta: timedelta or None = None):
+    """
+    Create a JWT token from the given data with an optional expiration time.
+
+    Parameters
+    ----------
+    data : dict
+        The data to encode in the JWT token
+    expires_delta : timedelta or None, optional
+        The time until the token expires, by default None (set to 15 minutes)
+
+    Returns
+    -------
+    str
+        The encoded JWT token
+    """
     to_encode = data.copy()
     if expires_delta: 
         expire = datetime.utcnow() + expires_delta
@@ -182,6 +328,19 @@ def create_access_token(data: dict, expires_delta: timedelta or None = None):
     return encoded_jwt
 
 async def get_auth(token: str = Depends(oauth_2_scheme)):
+    """
+    Validate a JWT token and return the associated user
+
+    Parameters
+    ----------
+    token : str
+        The JWT token to validate
+
+    Returns
+    -------
+    UserInDB
+        The associated user if the token is valid, raises an HTTPException otherwise
+    """
     credential_exception = HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Could not validate credentials", headers={"WWW-Authenticate": "Bearer"})
     try:
         payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
@@ -206,13 +365,26 @@ async def get_current_active_user(current_user: User = Depends(get_auth)):
 # API Endpoints / Routes
 ##
 
-# @app.exception_handler(Exception)
-# async def exception_handler(request: Request, exc: Exception):
-#     error_message = f"Unexpected error occured: {exc}"
-#     return JSONResponse(status_code=500, content={"detail": error_message})
-
 @app.post("/token/", response_model=Token, tags=["Auth"])
 async def login_for_access_token(form_data:UserCredentials):
+    """
+    Return an access token for the given username and password
+
+    Parameters
+    ----------
+    form_data : UserCredentials
+        The username and password to authenticate
+
+    Returns
+    -------
+    Token
+        The access token and its type
+
+    Raises
+    ------
+    HTTPException
+        If the username or password are invalid
+    """
     user = authenticate_user(db, form_data.username, form_data.password)
     if not user:
         raise HTTPException(
@@ -224,15 +396,36 @@ async def login_for_access_token(form_data:UserCredentials):
     access_token = create_access_token(data={"sub": user.username}, expires_delta=access_token_expires)
     return {"token": access_token, "token_type": "bearer"}
 
-@app.get("/aeries/SUIA/",  tags=["SUIA Endpoints"])
+@app.get("/aeries/SUIA/",  tags=["SUIA Endpoints", "Aeries"])
 async def get_all_suia_records(auth = Depends(get_auth)):
+    """
+    Returns a list of all SUIA records in Aeries
+
+    Returns
+    -------
+    JSONResponse
+        A JSON response containing the list of all SUIA records in Aeries
+    """
     cnxn = aeries.get_aeries_cnxn()
     sql = sql_obj.get_all_suia_records
     ret = pd.read_sql(sql, cnxn).to_dict(orient='records')
     return JSONResponse(content=ret, status_code=200)
 
-@app.get("/aeries/SUIA/{id}/",  tags=["SUIA Endpoints"])
+@app.get("/aeries/SUIA/{id}/",  tags=["SUIA Endpoints", "Aeries"])
 async def get_single_student_suia_records(id:int, auth = Depends(get_auth)):
+    """
+    Returns a list of all SUIA records for a given student ID
+
+    Parameters
+    ----------
+    id : int
+        The student ID
+
+    Returns
+    -------
+    JSONResponse
+        A JSON response containing the list of all SUIA records for the given student ID
+    """
     cnxn = aeries.get_aeries_cnxn()
     sql = sql_obj.get_student_suia_records.format(id=id)
     try:
@@ -255,8 +448,21 @@ async def get_single_student_suia_records(id:int, auth = Depends(get_auth)):
     print(ret)
     return JSONResponse(content=ret.to_dict('records'), status_code=200)
 
-@app.post("/aeries/SUIA/", response_model=BaseResponse, tags=["SUIA Endpoints"])
+@app.post("/aeries/SUIA/", response_model=BaseResponse, tags=["SUIA Endpoints", "Aeries"])
 async def insert_SUIA_row(data:SUIA_Body, auth = Depends(get_auth)):
+    """
+    Inserts a new row into the SUIA table
+
+    Parameters
+    ----------
+    data : SUIA_Body
+        The data to be inserted into the SUIA table
+
+    Returns
+    -------
+    JSONResponse
+        A JSON response containing the status and message of the operation
+    """
     cnxn = aeries.get_aeries_cnxn(access_level='w')
     now = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
     if 'T' not in data.SD: data.SD = data.SD+'T00:00:00'
@@ -296,8 +502,21 @@ async def insert_SUIA_row(data:SUIA_Body, auth = Depends(get_auth)):
         }
         return JSONResponse(content=content, status_code=500)
     
-@app.put("/aeries/SUIA/", response_model=BaseResponse, tags=["SUIA Endpoints"])
+@app.put("/aeries/SUIA/", response_model=BaseResponse, tags=["SUIA Endpoints", "Aeries"])
 async def update_SUIA_row(body:SUIAUpdade, auth=Depends(get_auth)):
+    """
+    Updates a row in the SUIA table
+
+    Parameters
+    ----------
+    body : SUIAUpdade
+        The data to be updated in the SUIA table
+
+    Returns
+    -------
+    JSONResponse
+        A JSON response containing the status and message of the operation
+    """
     try:
         cnxn = aeries.get_aeries_cnxn(access_level='w')
         sql_row = sql_obj.find_SUIA_row.format(id=body.ID, sq=body.SQ)
@@ -336,8 +555,21 @@ async def update_SUIA_row(body:SUIAUpdade, auth=Depends(get_auth)):
         }
         return JSONResponse(content=content, status_code=500)
 
-@app.delete("/aeries/SUIA/", response_model=BaseResponse, tags=["SUIA Endpoints"])
+@app.delete("/aeries/SUIA/", response_model=BaseResponse, tags=["SUIA Endpoints", "Aeries"])
 async def delete_SUIA_row(body:SUIADelete, auth = Depends(get_auth)):
+    """
+    Deletes a single row from the SUIA table in Aeries
+
+    Parameters
+    ----------
+    body : SUIADelete
+        The ID and SQ of the row to be deleted
+
+    Returns
+    -------
+    JSONResponse
+        A JSON response with the status and message of the operation
+    """
     cnxn = aeries.get_aeries_cnxn(access_level='w')
     delete_sql = sql_obj.delete_from_SUIA_table.format(id=body.ID, sq=body.SQ)
     find_sql = sql_obj.find_SUIA_row.format(id=body.ID, sq=body.SQ)
@@ -363,17 +595,30 @@ async def delete_SUIA_row(body:SUIADelete, auth = Depends(get_auth)):
         }
         return JSONResponse(content=content, status_code=500)
 
-@app.post("/aeries/ADS/", response_model=BaseResponse, tags=["ADS Endpoints"])
-async def insert_ADS_row(data:ADS_POST_Body, auth = Depends(get_auth)):
+
+     
+@app.post('/aeries/DSP/', response_model=BaseResponse, tags=["Discipline Endpoints", "Aeries"])
+async def insert_DSP_row(data:DSP_POST_Body, auth = Depends(get_auth)):
+    """
+    Inserts a new row into the DSP table in Aeries
+
+    Parameters
+    ----------
+    data : DSP_POST_Body
+        The data to be inserted into the DSP table
+
+    Returns
+    -------
+    JSONResponse
+        A JSON response containing the next SQ number for the given PID and SQ
+    """
     cnxn = aeries.get_aeries_cnxn(database='DST24000SLUSD_DAILY', access_level='w')
-    sq = get_next_ADS_sq(data.PID, cnxn)
-    sql = sql_obj.insert_into_ADS_table.format(
+    sq1 = get_next_DSP_sq(data.PID, data.SQ, cnxn)
+    sql = sql_obj.insert_into_DSP_table.format(
         PID=data.PID,
-        SQ=sq,
-        CD=data.CD,
-        GR=data.GR,
-        SCL=data.SCL              
-    )  
+        SQ=data.SQ,
+        SQ1=sq1,
+    )
 
     try: 
         with cnxn.connect() as conn:
@@ -381,7 +626,7 @@ async def insert_ADS_row(data:ADS_POST_Body, auth = Depends(get_auth)):
             conn.commit()
         content = {
             "status":"SUCCESS",
-            "message": f"Inserted new row into ADS for student ID#{data.PID} @ SQ {sq}"
+            "message": f"Inserted new row into DSP for student ID#{data.PID} @ SQ {data.SQ} - SQ1 {sq1}"
         }
         return JSONResponse(content=content, status_code=200)
      
@@ -391,23 +636,35 @@ async def insert_ADS_row(data:ADS_POST_Body, auth = Depends(get_auth)):
             "error": f"{e}"
         }
         return JSONResponse(content=content, status_code=500)
-      
-@app.post('/aeries/DSP/', response_model=BaseResponse, tags=["Discipline Endpoints"])
-async def insert_DSP_row(data:DSP_POST_Body, auth = Depends(get_auth)):
-    cnxn = aeries.get_aeries_cnxn(database='DST24000SLUSD_DAILY', access_level='w')
-    sq = get_next_DSP_sq(data.PID, cnxn)
-    return JSONResponse(content=f'{sq}', status_code=200)
-@app.post("/aeries/ADS/", response_model=BaseResponse, tags=["Discipline Endpoints"])
+
+
+
+@app.post("/aeries/ADS/", response_model=BaseResponse, tags=["Discipline Endpoints", "Aeries"])
 async def insert_ADS_row(data:ADS_POST_Body, auth = Depends(get_auth)):
+    """
+    Inserts a new row into the ADS table in Aeries
+
+    Parameters
+    ----------
+    data : ADS_POST_Body 
+        The data to be inserted into the ADS table
+
+    Returns
+    -------
+    JSONResponse
+        A JSON response containing the status and message of the operation
+    """ 
+    
     cnxn = aeries.get_aeries_cnxn(database='DST24000SLUSD_DAILY', access_level='w')
     sq = get_next_ADS_sq(data.PID, cnxn)
     sql = sql_obj.insert_into_ADS_table.format(
         PID=data.PID,
+        GR=data.GR,
+        SCL=data.SCL,
         SQ=sq,
         CD=data.CD,
-        GR=data.GR,
-        SCL=data.SCL              
-    )  
+        CO=data.CO              
+    )
 
     try: 
         with cnxn.connect() as conn:
@@ -429,6 +686,19 @@ async def insert_ADS_row(data:ADS_POST_Body, auth = Depends(get_auth)):
 
 @app.get("/aeries/student/{id}/", response_model=Student, tags=["Student Endoints"])
 async def get_student(id: int, auth = Depends(get_auth)):
+    """
+    Get a single student's information from Aeries
+
+    Parameters
+    ----------
+    id : int
+        The student ID to query
+
+    Returns
+    -------
+    Student
+        A Student object containing the student's information
+    """
     cnxn = aeries.get_aeries_cnxn()
     sql = sql_obj.student_test.format(id=id)
     data = pd.read_sql(sql, cnxn)   
@@ -437,7 +707,15 @@ async def get_student(id: int, auth = Depends(get_auth)):
 
 @app.get("/schools/", response_model=List[School], tags=["School Endpoints"])
 async def get_all_schools_info():
-    """List of basic school data for all schools"""
+
+    """
+    Get a list of all schools in Aeries
+
+    Returns
+    -------
+    List[School]
+        A list of School objects containing the school's information
+    """
     cnxn = aeries.get_aeries_cnxn()
     sql = sql_obj.locations
     data = pd.read_sql(sql, cnxn)
@@ -446,6 +724,19 @@ async def get_all_schools_info():
 
 @app.get("/schools/{sc}/", response_model=School, tags=["School Endpoints"])
 async def get_single_school_info(sc:int):
+    """
+    Get a single school's information from Aeries
+
+    Parameters
+    ----------
+    sc : int
+        The school code to query
+
+    Returns
+    -------
+    School
+        A School object containing the school's information
+    """
     cnxn = aeries.get_aeries_cnxn()
     sql = sql_obj.locations
     sql = sql + f' where cd = {sc}'
@@ -455,6 +746,14 @@ async def get_single_school_info(sc:int):
 
 @app.get("/users/me/", response_model=User, tags=["Testing"])
 async def read_users_me(current_user: User = Depends(get_current_active_user)):
+    """
+    Get the current user
+
+    Returns
+    -------
+    User
+        The current user
+    """
     return current_user
 
 

@@ -1,4 +1,5 @@
-select top 1 sq
+select top 1 sq1
 from DSP
 where PID = {id}
-order by sq DESC
+and SQ = {sq}
+order by sq1 DESC

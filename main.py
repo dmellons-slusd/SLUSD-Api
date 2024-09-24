@@ -1,7 +1,8 @@
+import json
 from db_users import db
 from decouple import config
 import requests
-from typing import List, Literal, Union
+from typing import List, Literal, Optional, Union
 from fastapi import Depends, FastAPI, HTTPException, status, Request, Body
 from fastapi.security import OAuth2PasswordBearer, OAuth2PasswordRequestForm
 from fastapi.responses import JSONResponse
@@ -28,6 +29,11 @@ ACCESS_TOKEN_EXPIRE_MINUTES = int(config("ACCESS_TOKEN_EXPIRE_MINUTES"))
 ##
 # Request Classes
 ##
+class ADS_RESPONSE(BaseModel):
+    status: str
+    message: str
+    ID: str
+    SQ: str
 
 class SUIA_Body(BaseModel):
     ID: int
@@ -59,14 +65,21 @@ class ADS_POST_Body(BaseModel):
     SCL: int = Field(..., description='School ID') # School ID
     CD: str = Field(..., description='Disposition Code') # Code
     GR: int = Field(..., description='Grade') # Grade
-    CO: str = Field(..., description='Comments')
+    CO: str = Field(default='', description='Comments')
 
+class Discipline_POST_Body(BaseModel):
+    PID: int = Field(..., description='Student ID')
+    SCL: int = Field(..., description='School ID') # School ID
+    CD: str = Field(..., description='Disposition Code') # Code
+    GR: int = Field(..., description='Grade') # Grade
+    DS: Optional[str] = Field(default='',  description='Disposition Code') # Disposition
+    CO: Optional[str] = Field(default='', description='Comments')
 
 class DSP_POST_Body(BaseModel):
     PID: int = Field(..., description='Student ID')
     SQ: int = Field(..., description='ADS Sequence') # Sequence
+    DS: Optional[str] = Field(default='',  description='Disposition Code') # Disposition
     # SQ1: int = Field( default=1, description='Disposition Sequence (restarts every ADS entry)') # Sequence
-    # DS: str = Field(..., description='Disposition') # Disposition
 
 ##
 # Internal auth classes
@@ -220,7 +233,7 @@ def get_next_DSP_sq(id:int, sq:int, cnxn) -> int:
     """
     sql = sql_obj.DSP_table_sequence.format(id=id, sq=sq)
     data = pd.read_sql(sql, cnxn)
-    print(data)
+
     if data.empty: return 1 
     return data.sq1.values[0]+1 
 
@@ -345,12 +358,14 @@ async def get_auth(token: str = Depends(oauth_2_scheme)):
     try:
         payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
         username: str = payload.get("sub")
+
         if username is None:
             raise credential_exception
         token_data = TokenData(username=username)
     except JWTError:
         raise credential_exception
     user = get_user(db, username=token_data.username)
+
     if user is None:
         raise credential_exception
     return user
@@ -445,7 +460,7 @@ async def get_single_student_suia_records(id:int, auth = Depends(get_auth)):
             "message":f"Error:{e}"
             }
         return JSONResponse(content=content, status_code=500)
-    print(ret)
+
     return JSONResponse(content=ret.to_dict('records'), status_code=200)
 
 @app.post("/aeries/SUIA/", response_model=BaseResponse, tags=["SUIA Endpoints", "Aeries"])
@@ -600,6 +615,8 @@ async def delete_SUIA_row(body:SUIADelete, auth = Depends(get_auth)):
 @app.post('/aeries/DSP/', response_model=BaseResponse, tags=["Discipline Endpoints", "Aeries"])
 async def insert_DSP_row(data:DSP_POST_Body, auth = Depends(get_auth)):
     """
+    CURRENTLY WRITING TO DST24000SLUSD_DAILY
+    ----------------------------------------
     Inserts a new row into the DSP table in Aeries
 
     Parameters
@@ -618,7 +635,8 @@ async def insert_DSP_row(data:DSP_POST_Body, auth = Depends(get_auth)):
         PID=data.PID,
         SQ=data.SQ,
         SQ1=sq1,
-    )
+        DS=data.DS,
+    ) 
 
     try: 
         with cnxn.connect() as conn:
@@ -639,9 +657,11 @@ async def insert_DSP_row(data:DSP_POST_Body, auth = Depends(get_auth)):
 
 
 
-@app.post("/aeries/ADS/", response_model=BaseResponse, tags=["Discipline Endpoints", "Aeries"])
+@app.post("/aeries/ADS/", response_model=ADS_RESPONSE, tags=["Discipline Endpoints", "Aeries"])
 async def insert_ADS_row(data:ADS_POST_Body, auth = Depends(get_auth)):
     """
+    WARN: CURRENTLY WRITING TO DST24000SLUSD_DAILY
+    ----------------------------------------
     Inserts a new row into the ADS table in Aeries
 
     Parameters
@@ -672,8 +692,10 @@ async def insert_ADS_row(data:ADS_POST_Body, auth = Depends(get_auth)):
             conn.commit()
         content = {
             "status":"SUCCESS",
-            "message": f"Inserted new row into ADS for student ID#{data.PID} @ SQ {sq}"
-        }
+            "message": f"Inserted new row into ADS for student ID#{data.PID} @ SQ {sq}",
+            "ID": f"{data.PID}",
+            "SQ": f"{sq}"
+        } 
         return JSONResponse(content=content, status_code=200)
      
     except Exception as e:
@@ -683,6 +705,41 @@ async def insert_ADS_row(data:ADS_POST_Body, auth = Depends(get_auth)):
         }
         return JSONResponse(content=content, status_code=500)
       
+@app.post('/aeries/discipline/', response_model=BaseResponse, tags=["Discipline Endpoints", "Aeries"])
+async def insert_discipline_record(data:Discipline_POST_Body, auth = Depends(get_auth)):
+    """
+    !!! CURRENTLY A WORK IN PROGRESS !!!
+    ---------------------
+    USE /aeries/ADS/ AND /aeries/DSP/ INSTEAD
+    ----------------------
+    """
+    id = data.PID
+    ds = data.DS
+    ads_response = await insert_ADS_row(data, auth=auth)
+
+    ads_record_decode =  ads_response.body.decode()
+    ads_record = loads(ads_record_decode)
+    sq = ads_record['SQ']
+
+    print(f'{data = }')
+    dsp_body = {
+        "PID": id,
+        "SQ": sq,
+        "DS": ds
+    }
+    dsp_response = await insert_DSP_row(dsp_body, auth=auth)
+
+    dsp_record_decode =  dsp_response.body.decode()
+    dsp_record = loads(dsp_record_decode)
+    print(f'{dsp_record = }')
+
+    ret = {
+        "message": f"Inserted new row into ADS for student ID#{data.PID} ",
+        "ADS": ads_record,
+        
+
+    } 
+    return JSONResponse(content=ret, status_code=200)
 
 @app.get("/aeries/student/{id}/", response_model=Student, tags=["Student Endoints"])
 async def get_student(id: int, auth = Depends(get_auth)):

@@ -4,13 +4,20 @@ INSERT INTO ADS (
     SCL,
     CD,
     CO,
-    DT
+    DT,
+    LCN,
+    SRF,
+    RF
+
 ) VALUES (
     '{PID}',
     '{SQ}',
     '{SCL}',
     '{CD}',
     '{CO}',
-    GETDATE()
+    '{DT}',
+    '{LCN}',
+    '{SRF}',
+    '{RF}'
 
 )

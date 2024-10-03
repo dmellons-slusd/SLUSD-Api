@@ -66,7 +66,10 @@ class ADS_POST_Body(BaseModel):
     CD: str = Field(..., description='Disposition Code') # Code
     GR: int = Field(..., description='Grade') # Grade
     CO: str = Field(default='', description='Comments')
-
+    DT: str = Field(default=datetime.now(), description='Date of Disposition')
+    LCN: int = Field(default=99, description='Location Code')
+    SRF: int = Field(default=0, description='Staff Referrer ID')
+    RF: str = Field(default='', description='Referrer Name')
 class Discipline_POST_Body(BaseModel):
     PID: int = Field(..., description='Student ID')
     SCL: int = Field(..., description='School ID') # School ID
@@ -683,7 +686,12 @@ async def insert_ADS_row(data:ADS_POST_Body, auth = Depends(get_auth)):
         SCL=data.SCL,
         SQ=sq,
         CD=data.CD,
-        CO=data.CO              
+        CO=data.CO, 
+             
+        DT=data.DT, 
+        LCN=data.LCN,
+        SRF=data.SRF,
+        RF=data.RF         
     )
 
     try: 

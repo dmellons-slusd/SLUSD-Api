@@ -7,7 +7,8 @@ INSERT INTO ADS (
     DT,
     LCN,
     SRF,
-    RF
+    RF,
+    IID
 
 ) VALUES (
     '{PID}',
@@ -18,6 +19,7 @@ INSERT INTO ADS (
     '{DT}',
     '{LCN}',
     '{SRF}',
-    '{RF}'
+    '{RF}',
+    '{IID}'
 
 )

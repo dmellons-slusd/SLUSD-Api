@@ -34,6 +34,7 @@ class ADS_RESPONSE(BaseModel):
     message: str
     ID: str
     SQ: str
+    IID: str
 
 class SUIA_Body(BaseModel):
     ID: int
@@ -614,7 +615,31 @@ async def delete_SUIA_row(body:SUIADelete, auth = Depends(get_auth)):
         return JSONResponse(content=content, status_code=500)
 
 
-     
+@app.get('/aeries/ADS_next_IID/', tags=["Discipline Endpoints", "Aeries"])
+async def get_next_ADS_IID():
+    """
+    CURRENTLY WRITING TO DST24000SLUSD_DAILY
+    ----------------------------------------
+    Returns the next IID for the ADS table in Aeries Between 500000 AND 968159
+    """
+    try:
+        cnxn = aeries.get_aeries_cnxn(database='DST24000SLUSD_DAILY')
+        sql = sql_obj.get_next_ADS_IID
+        # core.log(sql)
+        response = pd.read_sql(text(sql), cnxn)
+        ret = response.to_dict('records')[0]["IID"] + 1
+        return ret
+    except Exception as e:
+        print(e)
+        return JSONResponse(content={"error": f"{e}"}, status_code=500)
+
+def get_next_ADS_IID_internal(cnxn):
+    sql = sql_obj.get_next_ADS_IID
+    # core.log(sql)
+    response = pd.read_sql(text(sql), cnxn)
+    ret = response.to_dict('records')[0]["IID"] + 1
+    return ret
+
 @app.post('/aeries/DSP/', response_model=BaseResponse, tags=["Discipline Endpoints", "Aeries"])
 async def insert_DSP_row(data:DSP_POST_Body, auth = Depends(get_auth)):
     """
@@ -680,21 +705,23 @@ async def insert_ADS_row(data:ADS_POST_Body, auth = Depends(get_auth)):
     
     cnxn = aeries.get_aeries_cnxn(database='DST24000SLUSD_DAILY', access_level='w')
     sq = get_next_ADS_sq(data.PID, cnxn)
+    next_iid = get_next_ADS_IID_internal(cnxn) 
     sql = sql_obj.insert_into_ADS_table.format(
         PID=data.PID,
         GR=data.GR,
         SCL=data.SCL,
         SQ=sq,
         CD=data.CD,
-        CO=data.CO, 
+        CO=data.CO,
              
         DT=data.DT, 
         LCN=data.LCN,
+        RF=data.RF,         
         SRF=data.SRF,
-        RF=data.RF         
+        IID=str(next_iid)
     )
 
-    try: 
+    try:
         with cnxn.connect() as conn:
             conn.execute(text(sql))
             conn.commit()
@@ -702,7 +729,8 @@ async def insert_ADS_row(data:ADS_POST_Body, auth = Depends(get_auth)):
             "status":"SUCCESS",
             "message": f"Inserted new row into ADS for student ID#{data.PID} @ SQ {sq}",
             "ID": f"{data.PID}",
-            "SQ": f"{sq}"
+            "SQ": f"{sq}",
+            "IID": f"{next_iid}"
         } 
         return JSONResponse(content=content, status_code=200)
      

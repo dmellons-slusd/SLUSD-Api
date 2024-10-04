@@ -1,0 +1,7 @@
+select top 1 IID
+
+from ADS
+
+where IID BETWEEN 500000 AND 968159 
+
+ORDER BY IID DESC

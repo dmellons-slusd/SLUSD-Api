@@ -705,7 +705,9 @@ async def insert_ADS_row(data:ADS_POST_Body, auth = Depends(get_auth)):
     
     cnxn = aeries.get_aeries_cnxn(database='DST24000SLUSD_DAILY', access_level='w')
     sq = get_next_ADS_sq(data.PID, cnxn)
+    # print('sq',sq)
     next_iid = get_next_ADS_IID_internal(cnxn) 
+    # print('next_iid',next_iid)
     sql = sql_obj.insert_into_ADS_table.format(
         PID=data.PID,
         GR=data.GR,

@@ -2,6 +2,6 @@ select top 1 IID
 
 from ADS
 
-where IID BETWEEN 500000 AND 968159 
+where IID > 500000 
 
 ORDER BY IID DESC

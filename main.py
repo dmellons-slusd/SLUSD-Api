@@ -1,5 +1,6 @@
 import json
 import os
+import shutil
 import tempfile
 from db_users import db
 from decouple import config
@@ -139,7 +140,7 @@ class Token(BaseModel):
     token_type: str
 
 class TokenData(BaseModel):
-    username: str or None = None
+    username: Union[str, None] = None
 
 class UserCredentials(BaseModel):
     username: str
@@ -147,9 +148,9 @@ class UserCredentials(BaseModel):
 
 class User(BaseModel):
     username: str
-    email: str or None = None
-    full_name: str or None = None
-    disabled: bool or None = None
+    email: Union[str, None] = None
+    full_name: Union[str, None] = None
+    disabled: Union[bool, None] = None
 
 class UserInDB(User):
     hashed_password: str
@@ -366,7 +367,7 @@ def authenticate_user(db, username: str, password: str):
     if not verify_password(password, user.hashed_password): return False
     return user
 
-def create_access_token(data: dict, expires_delta: timedelta or None = None):
+def create_access_token(data: dict, expires_delta: Union[timedelta, None] = None):
     """
     Create a JWT token from the given data with an optional expiration time.
 

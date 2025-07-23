@@ -1,9 +1,11 @@
 import json
+import os
+import tempfile
 from db_users import db
 from decouple import config
 import requests
 from typing import List, Literal, Optional, Union
-from fastapi import Depends, FastAPI, HTTPException, status, Request, Body
+from fastapi import Depends, FastAPI, HTTPException, status, Request, Body, UploadFile, File
 from fastapi.security import OAuth2PasswordBearer, OAuth2PasswordRequestForm
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel, Field
@@ -17,6 +19,9 @@ from json import loads
 from slusdlib import aeries, core
 import pandas as pd
 from student_lookup import StudentLookup, StudentMatch  # Import the StudentLookup classes
+
+
+from iep_at_a_glance import delete_old_iep_docs, get_next_sq, get_student_grade, split_iep_pdf_from_upload, upload_iep_docs_to_aeries_from_list
 
 SECRET_KEY = config("SECRET_KEY")
 ALGORITHM = config("ALGORITHM")
@@ -88,7 +93,7 @@ class DSP_POST_Body(BaseModel):
     DS: Optional[str] = Field(default='',  description='Disposition Code') # Disposition
     # SQ1: int = Field( default=1, description='Disposition Sequence (restarts every ADS entry)') # Sequence
 
-# NEW: Student Lookup Request/Response Models
+
 class StudentSearchRequest(BaseModel):
     first_name: str = Field(..., description="Student's first name")
     last_name: str = Field(..., description="Student's last name") 
@@ -111,6 +116,20 @@ class StudentLookupResponse(BaseModel):
     message: str
     total_matches: int
     matches: List[StudentMatchResponse]
+
+# IEP Upload Models
+class IEPDocumentInfo(BaseModel):
+    file: str
+    stu_id: str
+    iep_date: str
+    pages: int
+
+class IEPUploadResponse(BaseModel):
+    status: str
+    message: str
+    total_documents: int
+    extracted_docs: List[IEPDocumentInfo]
+    uploaded_to_aeries: bool
 
 ##
 # Internal auth classes
@@ -169,7 +188,7 @@ app.add_middleware(
 )
 
 ##
-# Helper functoins
+# Helper functions
 ##
 
 def create_sql_update(body:dict, ignore_keys:List[str]=['ID', 'SQ', 'DEL', 'DTS']) -> str:
@@ -677,12 +696,11 @@ async def delete_SUIA_row(body:SUIADelete, auth = Depends(get_auth)):
 @app.get('/aeries/ADS_next_IID/', tags=["Discipline Endpoints", "Aeries"])
 async def get_next_ADS_IID():
     """
-    CURRENTLY WRITING TO DST24000SLUSD_DAILY
-    ----------------------------------------
+
     Returns the next IID for the ADS table in Aeries Between 500000 AND 968159
     """
     try:
-        cnxn = aeries.get_aeries_cnxn(database='DST24000SLUSD_DAILY')
+        cnxn = aeries.get_aeries_cnxn()
         sql = sql_obj.get_next_ADS_IID
         # core.log(sql)
         response = pd.read_sql(text(sql), cnxn)
@@ -702,8 +720,7 @@ def get_next_ADS_IID_internal(cnxn):
 @app.post('/aeries/DSP/', response_model=BaseResponse, tags=["Discipline Endpoints", "Aeries"])
 async def insert_DSP_row(data:DSP_POST_Body, auth = Depends(get_auth)):
     """
-    CURRENTLY WRITING TO DST24000SLUSD_DAILY
-    ----------------------------------------
+
     Inserts a new row into the DSP table in Aeries
 
     Parameters
@@ -716,7 +733,7 @@ async def insert_DSP_row(data:DSP_POST_Body, auth = Depends(get_auth)):
     JSONResponse
         A JSON response containing the next SQ number for the given PID and SQ
     """
-    cnxn = aeries.get_aeries_cnxn(database='DST24000SLUSD_DAILY', access_level='w')
+    cnxn = aeries.get_aeries_cnxn(access_level='w')
     sq1 = get_next_DSP_sq(data.PID, data.SQ, cnxn)
     sql = sql_obj.insert_into_DSP_table.format(
         PID=data.PID,
@@ -747,8 +764,7 @@ async def insert_DSP_row(data:DSP_POST_Body, auth = Depends(get_auth)):
 @app.post("/aeries/ADS/", response_model=ADS_RESPONSE, tags=["Discipline Endpoints", "Aeries"])
 async def insert_ADS_row(data:ADS_POST_Body, auth = Depends(get_auth)):
     """
-    WARN: CURRENTLY WRITING TO DST24000SLUSD_DAILY
-    ----------------------------------------
+  
     Inserts a new row into the ADS table in Aeries
 
     Parameters
@@ -762,7 +778,7 @@ async def insert_ADS_row(data:ADS_POST_Body, auth = Depends(get_auth)):
         A JSON response containing the status and message of the operation
     """ 
     
-    cnxn = aeries.get_aeries_cnxn(database='DST24000SLUSD_DAILY', access_level='w')
+    cnxn = aeries.get_aeries_cnxn(access_level='w')
     sq = get_next_ADS_sq(data.PID, cnxn)
     # print('sq',sq)
     next_iid = get_next_ADS_IID_internal(cnxn) 
@@ -1039,7 +1055,143 @@ async def read_users_me(current_user: User = Depends(get_current_active_user)):
     """
     return current_user
 
+# NEW: IEP Upload Endpoint
+@app.post("/sped/uploadIeps/", response_model=IEPUploadResponse, tags=["SPED Endpoints", "Aeries"])
+async def upload_iep_documents(
+    file: UploadFile = File(..., description="PDF file containing IEP documents"),
+    test_run: bool = False,
+    auth = Depends(get_auth)
+):
+    """
+    Upload and process IEP "At a Glance" documents.
+    
+    This endpoint:
+    1. Accepts a multi-page PDF containing multiple IEP documents
+    2. Splits the PDF by detecting IEP headers and extracting District IDs
+    3. Uploads each individual IEP document to the Aeries DOC table
+    4. Returns information about processed documents
+    
+    Parameters
+    ----------
+    file : UploadFile
+        The PDF file containing IEP documents to process
+    test_run : bool, optional
+        If True, process documents but don't upload to database (default: False)
+    auth : User
+        Authentication dependency
+        
+    Returns
+    -------
+    IEPUploadResponse
+        Response containing processing status and document information
+    """
+    
+    # Validate file type
+    if not file.filename.lower().endswith('.pdf'):
+        return JSONResponse(
+            content={
+                "status": "ERROR",
+                "message": "Only PDF files are supported",
+                "total_documents": 0,
+                "extracted_docs": [],
+                "uploaded_to_aeries": False
+            },
+            status_code=400
+        )
+    
+    temp_dir = None
+    try:
+        # Create temporary directory for processing
+        temp_dir = tempfile.mkdtemp(prefix="iep_upload_")
+        
+        # Read uploaded file content
+        file_content = await file.read()
+        
+        core.log(f"Processing uploaded PDF: {file.filename} ({len(file_content)} bytes)")
+        
+        # Split the PDF into individual IEP documents
+        extracted_docs = split_iep_pdf_from_upload(file_content, temp_dir)
+        
+        if not extracted_docs:
+            return JSONResponse(
+                content={
+                    "status": "WARNING", 
+                    "message": "No IEP documents found in the uploaded PDF. Please ensure the PDF contains valid IEP 'At a Glance' documents with the expected header format.",
+                    "total_documents": 0,
+                    "extracted_docs": [],
+                    "uploaded_to_aeries": False
+                },
+                status_code=200
+            )
+        
+        # Get database connection
+        cnxn = aeries.get_aeries_cnxn(access_level='w') if not test_run else aeries.get_aeries_cnxn(
+            database=config("TEST_DATABASE", default='DST24000SLUSD_DAILY'), 
+            access_level='w'
+        )
+        
+        # Upload to Aeries (unless it's a test run)
+        upload_success = True
+        try:
+            if not test_run:
+                upload_iep_docs_to_aeries_from_list(cnxn, extracted_docs, test_run)
+            else:
+                core.log("Test run - documents processed but not uploaded to database")
+        except Exception as e:
+            core.log(f"Error uploading to Aeries: {e}")
+            upload_success = False
+        
+        # Format response
+        formatted_docs = [
+            IEPDocumentInfo(
+                file=os.path.basename(doc["file"]),
+                stu_id=doc["stu_id"],
+                iep_date=doc["iep_date"],
+                pages=doc["pages"]
+            )
+            for doc in extracted_docs
+        ]
+        
+        status_message = f"Successfully processed {len(extracted_docs)} IEP document(s)"
+        if test_run:
+            status_message += " (TEST RUN - not uploaded to database)"
+        elif not upload_success:
+            status_message += " but encountered errors during database upload"
+        
+        return JSONResponse(
+            content={
+                "status": "SUCCESS" if upload_success else "PARTIAL_SUCCESS",
+                "message": status_message,
+                "total_documents": len(extracted_docs),
+                "extracted_docs": [doc.dict() for doc in formatted_docs],
+                "uploaded_to_aeries": upload_success and not test_run
+            },
+            status_code=200
+        )
+        
+    except Exception as e:
+        core.log(f"Error processing IEP upload: {e}")
+        return JSONResponse(
+            content={
+                "status": "ERROR",
+                "message": f"Error processing IEP documents: {str(e)}",
+                "total_documents": 0,
+                "extracted_docs": [],
+                "uploaded_to_aeries": False
+            },
+            status_code=500
+        )
+    
+    finally:
+        # Clean up temporary files
+        if temp_dir and os.path.exists(temp_dir):
+            try:
+                shutil.rmtree(temp_dir)
+                core.log(f"Cleaned up temporary directory: {temp_dir}")
+            except Exception as e:
+                core.log(f"Warning: Could not clean up temporary directory {temp_dir}: {e}")
 
 @app.post("/aeries/sped/iepAtAGlance/", tags=["SPED Endpoints"])
 async def get_iep_at_a_glance(request: Request, auth = Depends(get_auth)):
-    return JSONResponse(content='success', status_code=200)
+    return JSONResponse(content='success', status_code=200) 
+# NEW:

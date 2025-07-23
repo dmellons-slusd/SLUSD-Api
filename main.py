@@ -852,3 +852,7 @@ async def read_users_me(current_user: User = Depends(get_current_active_user)):
     return current_user
 
 
+@app.post("/aeries/sped/iepAtAGlance/", tags=["SPED Endpoints"])
+async def get_iep_at_a_glance(request: Request, auth = Depends(get_auth)):
+    return JSONResponse(content='success', status_code=200)
+    

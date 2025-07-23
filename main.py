@@ -1130,14 +1130,15 @@ async def upload_iep_documents(
             database=config("TEST_DATABASE", default='DST24000SLUSD_DAILY'), 
             access_level='w'
         )
-        
+        # Uncomment the following line to forse the use of a test database
+        # cnxn = aeries.get_aeries_cnxn(access_level='w', database=config("TEST_DATABASE", default='DST24000SLUSD_DAILY'))
         # Upload to Aeries (unless it's a test run)
         upload_success = True
         try:
             if not test_run:
                 upload_iep_docs_to_aeries_from_list(cnxn, extracted_docs, test_run)
             else:
-                core.log("Test run - documents processed but not uploaded to database")
+                core.log("Test run - documents processed and uploaded to test database.")
         except Exception as e:
             core.log(f"Error uploading to Aeries: {e}")
             upload_success = False

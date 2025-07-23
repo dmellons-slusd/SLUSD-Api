@@ -4,6 +4,7 @@ import re
 import os
 import tempfile
 from typing import List
+import dateparser
 from pandas import read_sql_query
 from decouple import config
 from datetime import datetime
@@ -378,7 +379,7 @@ def upload_iep_docs_to_aeries_from_list(cnxn, extracted_docs: List[dict], test_r
             'dt': str(doc['iep_date']),
             'gr': int(stu_gr) if isinstance(stu_gr, (int, float)) else str(stu_gr),
             'ct': str(category_code),
-            'nm': f'IEP At A Glance {datetime.strptime(doc["iep_date"], "%Y-%m-%d").strftime("%m/%d/%Y")} #{str(doc["stu_id"])}',
+            'nm': f'IEP At A Glance {dateparser.parse(doc["iep_date"]).strftime("%m/%d/%Y")} #{str(doc["stu_id"])}',
             'xt': 'pdf',
             'rb': pdf_data,
             'sz': int(len(pdf_data)),

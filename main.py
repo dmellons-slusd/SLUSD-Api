@@ -9,7 +9,7 @@ from typing import List, Literal, Optional, Union
 from fastapi import Depends, FastAPI, HTTPException, status, Request, Body, UploadFile, File
 from fastapi.security import OAuth2PasswordBearer, OAuth2PasswordRequestForm
 from fastapi.responses import JSONResponse
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, ValidationError
 from datetime import datetime, timedelta, date
 from jose import JWTError, jwt
 from passlib.context import CryptContext
@@ -137,6 +137,7 @@ class IEPUploadResponse(BaseModel):
 ##
 class Token(BaseModel):
     token: str
+    access_token: str
     token_type: str
 
 class TokenData(BaseModel):
@@ -431,68 +432,97 @@ async def get_current_active_user(current_user: User = Depends(get_auth)):
 ##
 # API Endpoints / Routes
 ##
+from typing import Union
 
-@app.post("/token", response_model=Token, tags=["Auth"])
-async def login_for_access_token_form(form_data: OAuth2PasswordRequestForm = Depends()):
-    """
-    Return an access token for the given username and password (OAuth2 Form - for Swagger UI)
-
-    Parameters
-    ----------
-    form_data : OAuth2PasswordRequestForm
-        The username and password to authenticate via form
-
-    Returns
-    -------
-    Token
-        The access token and its type
-
-    Raises
-    ------
-    HTTPException
-        If the username or password are invalid
-    """
-    user = authenticate_user(db, form_data.username, form_data.password)
-    if not user:
+async def get_credentials(
+    request: Request,
+    form_data: OAuth2PasswordRequestForm = Depends(OAuth2PasswordRequestForm),
+    json_credentials: UserCredentials = Body(None)
+) -> tuple[str, str]:
+    """Extract username and password from either form data or JSON body."""
+    content_type = request.headers.get("content-type", "").lower()
+    
+    if "application/json" in content_type and json_credentials:
+        return json_credentials.username, json_credentials.password
+    elif "application/x-www-form-urlencoded" in content_type and form_data:
+        return form_data.username, form_data.password
+    elif json_credentials:
+        return json_credentials.username, json_credentials.password
+    elif form_data:
+        return form_data.username, form_data.password
+    else:
         raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED, 
-            detail="Incorrect username or password",
-            headers={"WWW-Authenticate": "Bearer"},
-            )
-    access_token_expires = timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES)
-    access_token = create_access_token(data={"sub": user.username}, expires_delta=access_token_expires)
-    return {"token": access_token, "token_type": "bearer"}
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="No valid credentials provided"
+        )
 
 @app.post("/token/", response_model=Token, tags=["Auth"])
-async def login_for_access_token_json(credentials: UserCredentials):
+async def login_for_access_token_json(
+    request: Request
+):
     """
-    Return an access token for the given username and password (JSON Body)
-
-    Parameters
-    ----------
-    credentials : UserCredentials
-        The username and password to authenticate via JSON body
-
-    Returns
-    -------
-    Token
-        The access token and its type
-
-    Raises
-    ------
-    HTTPException
-        If the username or password are invalid
+    Return an access token for the given username and password.
+    Accepts both OAuth2 form data and JSON body.
     """
-    user = authenticate_user(db, credentials.username, credentials.password)
+    username = None
+    password = None
+    
+    content_type = request.headers.get("content-type", "").lower()
+    
+    try:
+        if "application/json" in content_type:
+            # Parse JSON manually and validate
+            body = await request.json()
+            try:
+                credentials = UserCredentials(**body)
+                username = credentials.username
+                password = credentials.password
+            except ValidationError as e:
+                raise HTTPException(
+                    status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                    detail=e.errors()
+                )
+                
+        elif "application/x-www-form-urlencoded" in content_type:
+            # Parse form data manually
+            form = await request.form()
+            username = form.get("username")
+            password = form.get("password")
+            
+            if not username or not password:
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail="Username and password are required in form data"
+                )
+        else:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Content-Type must be 'application/json' or 'application/x-www-form-urlencoded'"
+            )
+            
+    except ValueError:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Invalid JSON format"
+        )
+    
+    # Authenticate user
+    user = authenticate_user(db, username, password)
     if not user:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED, 
             detail="Incorrect username or password",
             headers={"WWW-Authenticate": "Bearer"},
-            )
+        )
+    
     access_token_expires = timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES)
     access_token = create_access_token(data={"sub": user.username}, expires_delta=access_token_expires)
-    return {"token": access_token, "token_type": "bearer"}
+    
+    return {
+        "token": access_token,
+        "access_token": access_token,
+        "token_type": "bearer"
+    }
 
 @app.get("/aeries/SUIA/",  tags=["SUIA Endpoints", "Aeries"])
 async def get_all_suia_records(auth = Depends(get_auth)):

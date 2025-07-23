@@ -1,10 +1,9 @@
-import json
+
 import os
 import shutil
 import tempfile
 from db_users import db
 from decouple import config
-import requests
 from typing import List, Literal, Optional, Union
 from fastapi import Depends, FastAPI, HTTPException, status, Request, Body, UploadFile, File
 from fastapi.security import OAuth2PasswordBearer, OAuth2PasswordRequestForm

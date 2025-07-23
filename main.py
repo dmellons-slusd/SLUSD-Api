@@ -412,15 +412,15 @@ async def get_current_active_user(current_user: User = Depends(get_auth)):
 # API Endpoints / Routes
 ##
 
-@app.post("/token/", response_model=Token, tags=["Auth"])
-async def login_for_access_token(form_data:UserCredentials):
+@app.post("/token", response_model=Token, tags=["Auth"])
+async def login_for_access_token_form(form_data: OAuth2PasswordRequestForm = Depends()):
     """
-    Return an access token for the given username and password
+    Return an access token for the given username and password (OAuth2 Form - for Swagger UI)
 
     Parameters
     ----------
-    form_data : UserCredentials
-        The username and password to authenticate
+    form_data : OAuth2PasswordRequestForm
+        The username and password to authenticate via form
 
     Returns
     -------
@@ -433,6 +433,37 @@ async def login_for_access_token(form_data:UserCredentials):
         If the username or password are invalid
     """
     user = authenticate_user(db, form_data.username, form_data.password)
+    if not user:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED, 
+            detail="Incorrect username or password",
+            headers={"WWW-Authenticate": "Bearer"},
+            )
+    access_token_expires = timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES)
+    access_token = create_access_token(data={"sub": user.username}, expires_delta=access_token_expires)
+    return {"token": access_token, "token_type": "bearer"}
+
+@app.post("/token/", response_model=Token, tags=["Auth"])
+async def login_for_access_token_json(credentials: UserCredentials):
+    """
+    Return an access token for the given username and password (JSON Body)
+
+    Parameters
+    ----------
+    credentials : UserCredentials
+        The username and password to authenticate via JSON body
+
+    Returns
+    -------
+    Token
+        The access token and its type
+
+    Raises
+    ------
+    HTTPException
+        If the username or password are invalid
+    """
+    user = authenticate_user(db, credentials.username, credentials.password)
     if not user:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED, 

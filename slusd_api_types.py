@@ -1,4 +1,5 @@
 from pydantic import BaseModel
+from typing import List, Optional
 
 class StudentTest(BaseModel):
     SC: int
@@ -255,6 +256,23 @@ class StudentLookup(BaseModel):
     email: str
     birthdate: str
     activation_code: str
+
+# NEW: Student Lookup Related Types
+class StudentMatchDetails(BaseModel):
+    student_id: int
+    first_name: str
+    last_name: str
+    birthdate: Optional[str]
+    address: Optional[str]
+    grade: Optional[int]
+    school: Optional[int]
+
+class StudentSearchCriteria(BaseModel):
+    first_name: str
+    last_name: str
+    birthdate: Optional[str] = None
+    address: Optional[str] = None
+    max_results: Optional[int] = 10
 
 class School(BaseModel):
     sc: int

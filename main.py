@@ -7,7 +7,7 @@ from fastapi import Depends, FastAPI, HTTPException, status, Request, Body
 from fastapi.security import OAuth2PasswordBearer, OAuth2PasswordRequestForm
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel, Field
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, date
 from jose import JWTError, jwt
 from passlib.context import CryptContext
 from fastapi.middleware.cors import CORSMiddleware
@@ -16,6 +16,7 @@ from sqlalchemy import text
 from json import loads
 from slusdlib import aeries, core
 import pandas as pd
+from student_lookup import StudentLookup, StudentMatch  # Import the StudentLookup classes
 
 SECRET_KEY = config("SECRET_KEY")
 ALGORITHM = config("ALGORITHM")
@@ -61,6 +62,7 @@ class SUIA_Table(BaseModel):
     INV: Literal['ACAD','RESO','TUPE']
     DEL: bool
     DTS: datetime = datetime.now()
+
 class ADS_POST_Body(BaseModel):
     PID: int = Field(..., description='Student ID')
     SCL: int = Field(..., description='School ID') # School ID
@@ -71,6 +73,7 @@ class ADS_POST_Body(BaseModel):
     LCN: int = Field(default=99, description='Location Code')
     SRF: int = Field(default=0, description='Staff Referrer ID')
     RF: str = Field(default='', description='Referrer Name')
+
 class Discipline_POST_Body(BaseModel):
     PID: int = Field(..., description='Student ID')
     SCL: int = Field(..., description='School ID') # School ID
@@ -84,6 +87,30 @@ class DSP_POST_Body(BaseModel):
     SQ: int = Field(..., description='ADS Sequence') # Sequence
     DS: Optional[str] = Field(default='',  description='Disposition Code') # Disposition
     # SQ1: int = Field( default=1, description='Disposition Sequence (restarts every ADS entry)') # Sequence
+
+# NEW: Student Lookup Request/Response Models
+class StudentSearchRequest(BaseModel):
+    first_name: str = Field(..., description="Student's first name")
+    last_name: str = Field(..., description="Student's last name") 
+    birthdate: Optional[str] = Field(None, description="Student's birthdate (YYYY-MM-DD or MM/DD/YYYY format)")
+    address: Optional[str] = Field(None, description="Student's address")
+    max_results: Optional[int] = Field(10, description="Maximum number of results to return")
+
+class StudentMatchResponse(BaseModel):
+    student_id: int
+    first_name: str
+    last_name: str
+    birthdate: Optional[str]  # Convert to string for JSON response
+    address: Optional[str]
+    confidence: float
+    match_reasons: List[str]
+    tier: int
+
+class StudentLookupResponse(BaseModel):
+    status: str
+    message: str
+    total_matches: int
+    matches: List[StudentMatchResponse]
 
 ##
 # Internal auth classes
@@ -111,6 +138,7 @@ class UserInDB(User):
 class BaseResponse(BaseModel):
     status: str
     message: str
+
 ##
 # Server Context
 ##
@@ -779,7 +807,7 @@ async def insert_discipline_record(data:Discipline_POST_Body, auth = Depends(get
     } 
     return JSONResponse(content=ret, status_code=200)
 
-@app.get("/aeries/student/{id}/", response_model=Student, tags=["Student Endoints"])
+@app.get("/aeries/student/{id}/", response_model=Student, tags=["Student Endpoints"])
 async def get_student(id: int, auth = Depends(get_auth)):
     """
     Get a single student's information from Aeries
@@ -799,6 +827,135 @@ async def get_student(id: int, auth = Depends(get_auth)):
     data = pd.read_sql(sql, cnxn)   
     ret = loads(data.to_json(orient="records"))[0]
     return ret
+
+# NEW: Student Lookup Endpoints
+@app.post("/aeries/student/lookup/", response_model=StudentLookupResponse, tags=["Student Endpoints", "Aeries"])
+async def search_students(search_request: StudentSearchRequest, auth = Depends(get_auth)):
+    """
+    Search for students using progressive matching with confidence scoring
+    
+    This endpoint uses a tiered approach to find student matches:
+    - Tier 1: Exact match on all provided fields (95% confidence)
+    - Tier 2: Exact name + birthdate (85% confidence) 
+    - Tier 3: Exact name + address (80% confidence)
+    - Tier 4: Exact name only (70% confidence)
+    - Tier 5: Fuzzy matching with phonetic and partial matches (50-75% confidence)
+    
+    Parameters
+    ----------
+    search_request : StudentSearchRequest
+        The search criteria including name, optional birthdate and address
+    
+    Returns
+    -------
+    StudentLookupResponse
+        A response containing the search status and list of matching students with confidence scores
+    """
+    try:
+        # Get database connection
+        engine = aeries.get_aeries_cnxn()
+        
+        # Create StudentLookup instance
+        lookup = StudentLookup(engine)
+        
+        # Perform the search
+        matches = lookup.find_students(
+            first_name=search_request.first_name,
+            last_name=search_request.last_name,
+            birthdate=search_request.birthdate,
+            address=search_request.address,
+            max_results=search_request.max_results
+        )
+        
+        # Convert matches to response format
+        match_responses = []
+        for match in matches:
+            match_responses.append(StudentMatchResponse(
+                student_id=match.student_id,
+                first_name=match.first_name,
+                last_name=match.last_name,
+                birthdate=match.birthdate.strftime('%Y-%m-%d') if match.birthdate else None,
+                address=match.address,
+                confidence=match.confidence,
+                match_reasons=match.match_reasons,
+                tier=match.tier
+            ))
+        
+        # Build response
+        if matches:
+            response = StudentLookupResponse(
+                status="SUCCESS",
+                message=f"Found {len(matches)} potential matches for {search_request.first_name} {search_request.last_name}",
+                total_matches=len(matches),
+                matches=match_responses
+            )
+        else:
+            response = StudentLookupResponse(
+                status="SUCCESS", 
+                message=f"No matches found for {search_request.first_name} {search_request.last_name}",
+                total_matches=0,
+                matches=[]
+            )
+            
+        return JSONResponse(content=response.dict(), status_code=200)
+        
+    except Exception as e:
+        error_response = StudentLookupResponse(
+            status="ERROR",
+            message=f"Error during student lookup: {str(e)}",
+            total_matches=0,
+            matches=[]
+        )
+        return JSONResponse(content=error_response.dict(), status_code=500)
+
+@app.get("/aeries/student/{student_id}/details/", tags=["Student Endpoints", "Aeries"])
+async def get_student_details(student_id: int, auth = Depends(get_auth)):
+    """
+    Get detailed information for a specific student by ID
+    
+    Parameters
+    ----------
+    student_id : int
+        The student ID to get details for
+        
+    Returns
+    -------
+    JSONResponse
+        Detailed student information including grade, school, etc.
+    """
+    try:
+        # Get database connection  
+        engine = aeries.get_aeries_cnxn()
+        
+        # Create StudentLookup instance
+        lookup = StudentLookup(engine)
+        
+        # Get student details
+        student_details = lookup.get_student_details(student_id)
+        
+        if student_details:
+            # Convert date to string for JSON response
+            if student_details.get('birthdate'):
+                student_details['birthdate'] = student_details['birthdate'].strftime('%Y-%m-%d')
+                
+            return JSONResponse(content={
+                "status": "SUCCESS",
+                "message": f"Found details for student ID {student_id}",
+                "student": student_details
+            }, status_code=200)
+        else:
+            return JSONResponse(content={
+                "status": "NOT_FOUND", 
+                "message": f"No student found with ID {student_id}",
+                "student": None
+            }, status_code=404)
+            
+    except Exception as e:
+        return JSONResponse(content={
+            "status": "ERROR",
+            "message": f"Error retrieving student details: {str(e)}",
+            "student": None
+        }, status_code=500)
 
 @app.get("/schools/", response_model=List[School], tags=["School Endpoints"])
 async def get_all_schools_info():
@@ -855,4 +1012,3 @@ async def read_users_me(current_user: User = Depends(get_current_active_user)):
 @app.post("/aeries/sped/iepAtAGlance/", tags=["SPED Endpoints"])
 async def get_iep_at_a_glance(request: Request, auth = Depends(get_auth)):
     return JSONResponse(content='success', status_code=200)
-    

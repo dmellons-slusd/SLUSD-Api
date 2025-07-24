@@ -9,6 +9,9 @@ def remove_all_files(directory: str):
     Args:
         directory: The path to the directory.
     """
+    if not os.path.exists(directory):
+        return
+        
     for filename in os.listdir(directory):
         file_path = os.path.join(directory, filename)
         try:

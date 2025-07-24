@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, UploadFile, File, Request
+from fastapi import APIRouter, Depends, UploadFile, File
 from fastapi.responses import JSONResponse
 from models.sped import IEPUploadResponse
 from services.sped_service import SPEDService
@@ -50,8 +50,60 @@ async def upload_iep_documents(
                 "status": "ERROR",
                 "message": f"Unexpected error: {str(e)}",
                 "total_documents": 0,
-                "extracted_docs": [],
-                "uploaded_to_aeries": False
+                "extracted_docs": []
+            },
+            status_code=500
+        )
+
+@router.post("/processIepFromFolder/")
+async def process_iep_from_folder(
+    auth=Depends(get_auth),
+    service: SPEDService = Depends(get_sped_service)
+):
+    """
+    Process IEP documents from the configured input folder.
+    This is useful for batch processing of IEP documents.
+    """
+    try:
+        core.log('~' * 80)
+        extracted_docs = service.process_iep_from_input_folder()
+        
+        if not extracted_docs:
+            return JSONResponse(
+                content={
+                    "status": "WARNING",
+                    "message": "No IEP documents found in the input folder",
+                    "total_documents": 0,
+                    "extracted_docs": []
+                },
+                status_code=200
+            )
+        
+        return JSONResponse(
+            content={
+                "status": "SUCCESS",
+                "message": f"Successfully processed {len(extracted_docs)} IEP document(s)",
+                "total_documents": len(extracted_docs),
+                "extracted_docs": [
+                    {
+                        "file": doc["stu_id"],
+                        "stu_id": doc["stu_id"],
+                        "iep_date": doc["iep_date"],
+                        "pages": doc["pages"]
+                    }
+                    for doc in extracted_docs
+                ]
+            },
+            status_code=200
+        )
+        
+    except Exception as e:
+        return JSONResponse(
+            content={
+                "status": "ERROR",
+                "message": f"Error processing IEP documents: {str(e)}",
+                "total_documents": 0,
+                "extracted_docs": []
             },
             status_code=500
         )

@@ -6,3 +6,6 @@ db_users.py
 get_password_hash.py
 *test*
 *.log
+split_pdfs/
+input_pdfs/
+*.pdf

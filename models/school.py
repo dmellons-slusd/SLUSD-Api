@@ -1,0 +1,15 @@
+from pydantic import BaseModel
+
+class School(BaseModel):
+    sc: int
+    name: str
+    principal: str
+    principal_email: str
+    street_address: str
+    city: str
+    state: str
+    zip: str
+    area_code: str
+    phone_number: str
+    mailing_address: str
+    full_phone: str

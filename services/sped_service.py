@@ -346,4 +346,4 @@ class SPEDService:
                 access_level='w'
             )
         else:
-            return aeries.get_aeries_cnxn(access_level='w', database=self.settings.TEST_DATABASE)
+            return aeries.get_aeries_cnxn(access_level='w')

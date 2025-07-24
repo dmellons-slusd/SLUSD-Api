@@ -61,6 +61,8 @@ async def process_iep_from_folder(
     service: SPEDService = Depends(get_sped_service)
 ):
     """
+    WARN: THIS IS NOT YET IMPLEMENTED
+    ---
     Process IEP documents from the configured input folder.
     This is useful for batch processing of IEP documents.
     """

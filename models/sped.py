@@ -12,3 +12,4 @@ class IEPUploadResponse(BaseModel):
     message: str
     total_documents: int
     extracted_docs: List[IEPDocumentInfo]
+    errors: List[str] = []

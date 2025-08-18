@@ -56,10 +56,10 @@ class SPEDService:
             upload_success = True
             # try:
             if not test_run:
-                self._upload_iep_docs_to_aeries(cnxn, extracted_docs, test_run)
+                errors = self._upload_iep_docs_to_aeries(cnxn, extracted_docs, test_run)
             else:
                 core.log("Test run - documents processed and uploaded to test database.")
-                self._upload_iep_docs_to_aeries(cnxn, extracted_docs, test_run)
+                errors = self._upload_iep_docs_to_aeries(cnxn, extracted_docs, test_run)
             # except Exception as e:
             #     core.log(f"Error uploading to Aeries: {e}")
             #     upload_success = False
@@ -85,7 +85,8 @@ class SPEDService:
                 status="SUCCESS" if upload_success else "PARTIAL_SUCCESS",
                 message=status_message,
                 total_documents=len(extracted_docs),
-                extracted_docs=formatted_docs
+                extracted_docs=formatted_docs,
+                errors=errors
             )
             
         except Exception as e:
@@ -244,14 +245,34 @@ class SPEDService:
             
             return extracted_docs
 
-    def _upload_iep_docs_to_aeries(self, cnxn, extracted_docs: List[Dict], test_run: bool = False, lock_table: str = 'IEPD') -> None:
+    def _upload_iep_docs_to_aeries(self, cnxn, extracted_docs: List[Dict], test_run: bool = False, lock_table: str = 'IEPD') -> List[Dict] | None:
         """
         Upload IEP documents to Aeries from a list of extracted document info.
         """
         category_code = self.settings.IEP_AT_A_GLANCE_DOCUMENT_CODE
         today = datetime.now().strftime("%Y-%m-%d")
+        errors = []        
         
         for doc in extracted_docs:
+            # Skip documents with invalid student IDs
+            if doc['stu_id'].startswith("unknown_"):
+                errors.append({
+                    "message":f"Invalid student ID format: {doc['stu_id']}",
+                    "stu_id": doc['stu_id']
+                })
+                core.log(f"Skipping document with invalid student ID: {doc['stu_id']}")
+                continue
+            
+            # Validate student ID is numeric
+            try:
+                student_id = int(doc['stu_id'])
+            except ValueError:
+                errors.append({
+                    "message":f"Invalid student ID format: {doc['stu_id']}",
+                    "stu_id": doc['stu_id']
+                })
+                core.log(f"Skipping document with invalid student ID: {doc['stu_id']}")
+                continue
             core.log(f"Uploading {doc['file']} to AERIES...")
             with open(doc['file'], "rb") as file:
                 pdf_data = file.read()
@@ -261,6 +282,10 @@ class SPEDService:
             stu_gr = self._get_student_grade(cnxn, int(doc['stu_id']))
             
             if stu_gr == "" or stu_gr is None:
+                errors.append({
+                    "message":f"Student {doc['stu_id']} not found in the database.",
+                    "stu_id": doc['stu_id']
+                })
                 core.log(f"Student {doc['stu_id']} not found in the database.")
                 continue
                 
@@ -301,6 +326,7 @@ class SPEDService:
                 continue
         
         core.log("Upload complete.")
+        return errors
 
     def _get_next_sq(self, id: int, table_name: str, cnxn, pid_for_id: bool = False) -> int:
         """

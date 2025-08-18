@@ -8,7 +8,7 @@ class Settings:
     ACCESS_TOKEN_EXPIRE_MINUTES: int = config("ACCESS_TOKEN_EXPIRE_MINUTES", cast=int)
     
     # Database settings
-    TEST_DATABASE: str = config("TEST_DATABASE", default='DST24000SLUSD_DAILY')
+    TEST_DATABASE: str = config("TEST_DATABASE", default='DST25000SLUSD_DAILY')
     
     # IEP settings
     SPLIT_IEP_FOLDER: str = config("SPLIT_IEP_FOLDER", default="split_pdfs")

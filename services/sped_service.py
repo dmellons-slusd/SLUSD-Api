@@ -54,14 +54,15 @@ class SPEDService:
             
             # Upload to Aeries (unless it's a test run)
             upload_success = True
-            try:
-                if not test_run:
-                    self._upload_iep_docs_to_aeries(cnxn, extracted_docs, test_run)
-                else:
-                    core.log("Test run - documents processed and uploaded to test database.")
-            except Exception as e:
-                core.log(f"Error uploading to Aeries: {e}")
-                upload_success = False
+            # try:
+            if not test_run:
+                self._upload_iep_docs_to_aeries(cnxn, extracted_docs, test_run)
+            else:
+                core.log("Test run - documents processed and uploaded to test database.")
+                self._upload_iep_docs_to_aeries(cnxn, extracted_docs, test_run)
+            # except Exception as e:
+            #     core.log(f"Error uploading to Aeries: {e}")
+            #     upload_success = False
             
             # Format response
             formatted_docs = [
@@ -243,7 +244,7 @@ class SPEDService:
             
             return extracted_docs
 
-    def _upload_iep_docs_to_aeries(self, cnxn, extracted_docs: List[Dict], test_run: bool = False, lock_table: str = 'CSE') -> None:
+    def _upload_iep_docs_to_aeries(self, cnxn, extracted_docs: List[Dict], test_run: bool = False, lock_table: str = 'IEPD') -> None:
         """
         Upload IEP documents to Aeries from a list of extracted document info.
         """
@@ -291,10 +292,13 @@ class SPEDService:
                 'idt': today
             }
             
-            if not test_run:
+            try:
                 with cnxn.connect() as conn:
                     conn.execute(sql, params)
                     conn.commit()
+            except Exception as e:
+                core.log(f"Error uploading document for student {doc['stu_id']}: {e}")
+                continue
         
         core.log("Upload complete.")
 
@@ -346,4 +350,4 @@ class SPEDService:
                 access_level='w'
             )
         else:
-            return aeries.get_aeries_cnxn(access_level='w', database=self.settings.TEST_DATABASE)
+            return aeries.get_aeries_cnxn(access_level='w')

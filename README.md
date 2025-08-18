@@ -1,17 +1,19 @@
 # SLUSD API
 
-FastAPI REST API for SLUSD data requests - Now with improved architecture and organization!
+FastAPI REST API for SLUSD data requests - Clean, modular architecture for educational data management!
 
-## 🏗️ New Architecture
+## 🏗️ Current Architecture
 
-The application has been refactored into a clean, modular architecture:
+The application follows a clean, modular architecture:
 
 ```
-C:/refactors/
+/
 ├── main.py                    # Application entry point
 ├── config.py                  # Configuration management
 ├── dependencies.py            # Shared dependencies & auth
 ├── requirements.txt           # Python dependencies
+├── .gitignore                 # Git ignore rules
+├── launch_server.bat/.sh      # Server launch scripts
 ├── models/                    # Pydantic models
 │   ├── __init__.py
 │   ├── auth.py               # Authentication models
@@ -38,9 +40,13 @@ C:/refactors/
 ├── utils/                     # Utility functions
 │   ├── __init__.py
 │   ├── database.py           # Database utilities
-│   └── helpers.py            # Helper functions
+│   ├── helpers.py            # Helper functions
+│   └── student_lookup.py     # Advanced student search
 ├── sql/                       # SQL query files
-└── slusdlib/                 # Existing library code
+│   ├── *.sql                 # Individual query files
+├── scripts/                   # Utility scripts
+│   └── process_iep_standalone.py # Standalone IEP processing
+└── slusdlib/                 # External library dependency
 ```
 
 ## 🚀 Quick Start
@@ -48,25 +54,28 @@ C:/refactors/
 ### 1. Setup
 
 ```bash
-# Clone or copy the refactored code to C:/refactors
-cd C:/refactors
-
 # Install dependencies
 pip install -r requirements.txt
 
-# Copy your existing configuration files
-# - db_users.py (your user database)
-# - .env (environment variables)
+# Configure environment variables
+# Create .env file with required settings (see Configuration section)
+
+# Ensure database connection files are present:
+# - db_users.py (user authentication database)
 ```
 
 ### 2. Run the Application
 
 ```bash
-# Development mode with auto-reload
-python main.py
+# Using the launch scripts (recommended)
+./launch_server.sh    # Linux/Mac
+launch_server.bat     # Windows
 
 # Or using uvicorn directly
 uvicorn main:app --reload --host 0.0.0.0 --port 8000
+
+# Or using Python directly
+python main.py
 ```
 
 ### 3. Access the API
@@ -78,7 +87,7 @@ uvicorn main:app --reload --host 0.0.0.0 --port 8000
 
 ### Authentication
 
-- `POST /token/` - Get access token
+- `POST /token/` - Get access token (supports both JSON and form data)
 - `GET /users/me/` - Get current user info
 
 ### SUIA Management
@@ -94,12 +103,12 @@ uvicorn main:app --reload --host 0.0.0.0 --port 8000
 - `GET /aeries/ADS_next_IID/` - Get next ADS IID
 - `POST /aeries/ADS/` - Create ADS record
 - `POST /aeries/DSP/` - Create DSP record
-- `POST /aeries/discipline/` - Create discipline record (composite)
+- `POST /aeries/discipline/` - Create discipline record (composite - WIP)
 
 ### Student Management
 
 - `GET /aeries/student/{id}/` - Get student by ID
-- `POST /aeries/student/lookup/` - Search students
+- `POST /aeries/student/lookup/` - Advanced student search with fuzzy matching
 - `GET /aeries/student/{id}/details/` - Get detailed student info
 
 ### School Management
@@ -109,27 +118,59 @@ uvicorn main:app --reload --host 0.0.0.0 --port 8000
 
 ### Special Education
 
-- `POST /sped/uploadIeps/` - Upload IEP documents
-- `POST /sped/iepAtAGlance/` - IEP operations
+- `POST /sped/uploadIepAtAGlance/` - Upload and process IEP documents
+- `POST /sped/processIepFromFolder/` - Process IEPs from configured folder
 
 ## 🔧 Configuration
 
-The application uses environment variables for configuration. Ensure your `.env` file contains:
+The application uses environment variables for configuration. Create a `.env` file with:
 
 ```env
+# Authentication
 SECRET_KEY=your_secret_key
 ALGORITHM=HS256
 ACCESS_TOKEN_EXPIRE_MINUTES=30
+
+# Database
 TEST_DATABASE=DST24000SLUSD_DAILY
+
+# IEP Processing
 SPLIT_IEP_FOLDER=split_pdfs
 INPUT_DIRECTORY_PATH=input_pdfs
 IEP_AT_A_GLANCE_DOCUMENT_CODE=11
+
+# Application
 TEST_RUN=False
 ```
 
+## 🔍 Key Features
+
+### Advanced Student Search
+
+The student lookup system provides progressive matching with confidence scoring:
+
+- **Tier 1**: Exact match on all fields (95% confidence)
+- **Tier 2**: Exact name + birthdate (85% confidence)
+- **Tier 3**: Exact name + address (80% confidence)
+- **Tier 4**: Exact name only (70% confidence)
+- **Tier 5**: Fuzzy matching with phonetic and partial matches (50-75% confidence)
+
+### IEP Document Processing
+
+Automated processing of IEP "At a Glance" documents:
+
+- PDF splitting by header detection
+- District ID extraction
+- Automatic upload to Aeries DOC table
+- Support for both file upload and folder processing
+
+### Comprehensive CORS Support
+
+Pre-configured for SLUSD domains and development environments.
+
 ## 🧪 Testing
 
-Each service can be tested independently:
+Test individual services:
 
 ```python
 # Example: Testing SUIA service
@@ -139,56 +180,35 @@ service = SUIAService()
 records = service.get_all_records()
 ```
 
-## 🔄 Migration from Old Structure
+## 📁 File Structure Details
 
-If migrating from the original `main.py` structure:
+### Models (`/models/`)
 
-1. **Run the migration script**: `python migrate_to_refactored.py`
-2. **Copy refactored files** to your destination
-3. **Update imports** in any external scripts
-4. **Test all endpoints** to ensure functionality
-5. **Review** `MIGRATION_NOTES.md` for detailed changes
+Pydantic models for request/response validation and data structure definition.
 
-## 📈 Benefits of Refactored Architecture
+### Endpoints (`/endpoints/`)
 
-### ✅ Separation of Concerns
+FastAPI router endpoints that handle HTTP requests and responses.
 
-- **Models**: Data structures and validation
-- **Services**: Business logic and database operations  
-- **Endpoints**: HTTP request/response handling
-- **Utils**: Shared utilities and helpers
+### Services (`/services/`)
 
-### ✅ Better Maintainability
+Business logic layer that handles database operations and complex processing.
 
-- Smaller, focused files
-- Clear dependencies
-- Easier to locate and fix issues
+### Utils (`/utils/`)
 
-### ✅ Improved Testability
+Shared utilities including database helpers, file operations, and the advanced student lookup system.
 
-- Services can be tested independently
-- Mock dependencies easily
-- Clear interfaces between components
+### SQL (`/sql/`)
 
-### ✅ Enhanced Reusability
+Individual SQL query files for better maintainability and version control.
 
-- Services can be used across multiple endpoints
-- Shared utilities prevent code duplication
-- Modular design supports future extensions
-
-### ✅ Better Development Experience
-
-- Faster development with clear structure
-- Easier onboarding for new developers
-- Cleaner git diffs and code reviews
-
-## 🛠️ Development Guidelines
+## 🔄 Development Guidelines
 
 ### Adding New Endpoints
 
-1. **Create models** in appropriate `models/*.py` file
+1. **Define models** in appropriate `models/*.py` file
 2. **Implement business logic** in `services/*.py`
-3. **Create endpoints** in `endpoints/*.py`
+3. **Create endpoint handlers** in `endpoints/*.py`
 4. **Register router** in `main.py`
 
 ### Example: Adding a new feature
@@ -201,6 +221,9 @@ class ExampleModel(BaseModel):
 
 # 2. services/example_service.py
 class ExampleService:
+    def __init__(self, db_connection=None):
+        self.cnxn = db_connection or aeries.get_aeries_cnxn()
+    
     def get_example(self, id: int):
         # Business logic here
         pass
@@ -214,11 +237,69 @@ def get_example(id: int, service: ExampleService = Depends()):
 
 # 4. main.py
 from endpoints import example
-app.include_router(example.router, prefix="/example")
+app.include_router(example.router, prefix="/example", tags=["Example"])
 ```
+
+## 🛠️ Utilities and Scripts
+
+### Standalone Scripts
+
+- `scripts/process_iep_standalone.py` - Process IEP documents outside the API
+- `print_endpoint_types.py` - Development utility for analyzing endpoint responses
+
+### Launch Scripts
+
+- `launch_server.sh` / `launch_server.bat` - Cross-platform server launching
+
+## 📈 Architecture Benefits
+
+### ✅ Separation of Concerns
+
+- **Models**: Data validation and structure
+- **Services**: Business logic and database operations
+- **Endpoints**: HTTP handling and routing
+- **Utils**: Shared functionality
+
+### ✅ Enhanced Features
+
+- Progressive student matching with confidence scoring
+- Automated IEP document processing with PDF splitting
+- Comprehensive error handling and logging
+- Flexible authentication supporting multiple content types
+
+### ✅ Maintainability
+
+- Clear file organization
+- Dependency injection for testing
+- SQL queries in separate files
+- Comprehensive type hints
+
+### ✅ Production Ready
+
+- CORS configuration for SLUSD domains
+- Environment-based configuration
+- Proper error handling and status codes
+- Logging and monitoring capabilities
+
+## 🔒 Security
+
+- JWT-based authentication
+- Password hashing with bcrypt
+- Database connection management
+- Input validation via Pydantic models
+
+## 📋 Dependencies
+
+Key external libraries:
+- **FastAPI** - Web framework
+- **SQLAlchemy** - Database ORM
+- **Pandas** - Data manipulation
+- **PyPDF2** - PDF processing
+- **dateparser** - Date parsing
+- **python-jose** - JWT handling
+- **passlib** - Password hashing
 
 ## 📝 TODO
 
 - [ ] Add API versioning
 - [ ] Add health check endpoints
-

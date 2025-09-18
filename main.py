@@ -17,7 +17,8 @@ origins = [
     "http://localhost:8000",
     "http://*.slusd.us",
     "https://*.slusd.us",
-    "http://10.15.1.*" 
+    "http://10.15.1.*",
+    "https://data.slusd.us" 
 ]
 
 app.add_middleware(

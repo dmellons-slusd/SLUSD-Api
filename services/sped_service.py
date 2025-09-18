@@ -75,11 +75,12 @@ class SPEDService:
                 for doc in extracted_docs
             ]
             
-            status_message = f"Successfully processed {len(extracted_docs)} IEP document(s)"
+            status_message = f"Successfully processed {len(extracted_docs)} IEP document(s) {f'with {len(errors)} errors' if len(errors) > 0 else ''}"
             if test_run:
                 status_message += " (TEST RUN - not uploaded to database)"
             elif not upload_success:
                 status_message += " but encountered errors during database upload"
+                upload_success = False
             
             return IEPUploadResponse(
                 status="SUCCESS" if upload_success else "PARTIAL_SUCCESS",
@@ -258,18 +259,27 @@ class SPEDService:
             if doc['stu_id'].startswith("unknown_"):
                 errors.append({
                     "message":f"Invalid student ID format: {doc['stu_id']}",
-                    "stu_id": doc['stu_id']
+                    "stu_id": doc['stu_id'],
+                    "iep_date": doc['iep_date']
                 })
                 core.log(f"Skipping document with invalid student ID: {doc['stu_id']}")
                 continue
-            
+            if doc['iep_date'] == "unknown_date":
+                errors.append({
+                    "message":f"Invalid IEP date format for student {doc['stu_id']}",
+                    "stu_id": doc['stu_id'],
+                    "iep_date": doc['iep_date']
+                })
+                core.log(f"Skipping document with invalid IEP date: {doc['stu_id']}")
+                continue
             # Validate student ID is numeric
             try:
                 student_id = int(doc['stu_id'])
             except ValueError:
                 errors.append({
                     "message":f"Invalid student ID format: {doc['stu_id']}",
-                    "stu_id": doc['stu_id']
+                    "stu_id": doc['stu_id'],
+                    "iep_date": doc['iep_date']
                 })
                 core.log(f"Skipping document with invalid student ID: {doc['stu_id']}")
                 continue
@@ -284,7 +294,8 @@ class SPEDService:
             if stu_gr == "" or stu_gr is None:
                 errors.append({
                     "message":f"Student {doc['stu_id']} not found in the database.",
-                    "stu_id": doc['stu_id']
+                    "stu_id": doc['stu_id'],
+                    "iep_date": doc['iep_date']
                 })
                 core.log(f"Student {doc['stu_id']} not found in the database.")
                 continue

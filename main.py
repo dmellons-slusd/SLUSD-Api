@@ -18,7 +18,10 @@ origins = [
     "http://*.slusd.us",
     "https://*.slusd.us",
     "http://10.15.1.*",
-    "https://data.slusd.us" 
+    "https://data.slusd.us", 
+    "http://data.slusd.us",
+    "http://127.0.0.1:8000", 
+    "https://127.0.0.1:8000", 
 ]
 
 app.add_middleware(

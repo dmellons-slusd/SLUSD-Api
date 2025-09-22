@@ -293,11 +293,11 @@ class SPEDService:
             
             if stu_gr == "" or stu_gr is None:
                 errors.append({
-                    "message":f"Student {doc['stu_id']} not found in the database.",
+                    "message":f"Student {doc['stu_id']} not found in the database, or student is inactive.",
                     "stu_id": doc['stu_id'],
                     "iep_date": doc['iep_date']
                 })
-                core.log(f"Student {doc['stu_id']} not found in the database.")
+                core.log(f"Student {doc['stu_id']} not found in the database, or student is inactive.")
                 continue
                 
             # Delete old IEP docs

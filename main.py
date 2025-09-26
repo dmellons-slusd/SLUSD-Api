@@ -1,6 +1,6 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
-from endpoints import auth, suia, discipline, students, schools, sped
+from endpoints import auth, suia, discipline, students, schools, sped, docs
 from config import get_settings
 
 settings = get_settings()
@@ -39,6 +39,7 @@ app.include_router(discipline.router, prefix="/aeries", tags=["Discipline Endpoi
 app.include_router(students.router, prefix="/aeries/student", tags=["Student Endpoints", "Aeries"])
 app.include_router(schools.router, prefix="/schools", tags=["School Endpoints"])
 app.include_router(sped.router, prefix="/sped", tags=["SPED Endpoints", "Aeries"])
+app.include_router(docs.router, prefix="/docs", tags=["Document Management", "Aeries"])
 
 if __name__ == "__main__":
     import uvicorn

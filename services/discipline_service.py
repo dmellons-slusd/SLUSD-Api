@@ -15,6 +15,16 @@ class DisciplineService:
         response = pd.read_sql(text(sql), self.cnxn)
         return response.to_dict('records')[0]["IID"] + 1
     
+    def clean_params(self, params: dict) -> dict:
+        """Convert numpy types to native Python types for SQLAlchemy compatibility"""
+        cleaned_params = {}
+        for key, value in params.items():
+            if hasattr(value, 'item'):
+                cleaned_params[key] = value.item()
+            else:
+                cleaned_params[key] = value
+        return cleaned_params
+    
     def create_ads_record(self, data: ADS_POST_Body) -> Tuple[str, str, str]:
         """
         Create a new ADS record
@@ -24,26 +34,28 @@ class DisciplineService:
         sq = self._get_next_ads_sq(data.PID, cnxn)
         next_iid = self.get_next_ads_iid()
         
-        sql = self.sql_obj.insert_into_ADS_table.format(
-            PID=data.PID,
-            GR=data.GR,
-            SCL=data.SCL,
-            SQ=sq,
-            CD=data.CD,
-            CO=data.CO,
-            DT=data.DT, 
-            LCN=data.LCN,
-            RF=data.RF,         
-            SRF=data.SRF,
-            IID=str(next_iid)
-        )
+        # Use parameterized query instead of string formatting to prevent SQL injection
+        sql = self.sql_obj.insert_into_ADS_table
         
+        params = {
+            'PID': data.PID,
+            'GR': data.GR,
+            'SCL': data.SCL,
+            'SQ': sq,
+            'CD': data.CD,
+            'CO': data.CO,
+            'DT': str(data.DT) if hasattr(data.DT, 'strftime') else data.DT,
+            'LCN': data.LCN,
+            'RF': data.RF,
+            'SRF': data.SRF,
+            'IID': str(next_iid)
+        }
+        cleaned_params = self.clean_params(params)
         with cnxn.connect() as conn:
-            conn.execute(text(sql))
+            conn.execute(text(sql), cleaned_params)
             conn.commit()
         
         return str(data.PID), str(sq), str(next_iid)
-    
     def create_dsp_record(self, data: DSP_POST_Body) -> int:
         """
         Create a new DSP record
@@ -52,15 +64,21 @@ class DisciplineService:
         cnxn = aeries.get_aeries_cnxn(access_level='w')
         sq1 = self._get_next_dsp_sq(data.PID, data.SQ, cnxn)
         
-        sql = self.sql_obj.insert_into_DSP_table.format(
-            PID=data.PID,
-            SQ=data.SQ,
-            SQ1=sq1,
-            DS=data.DS,
-        )
+        # Use parameterized query instead of string formatting
+        sql = """
+        INSERT INTO DSP (PID, SQ, SQ1, DS)
+        VALUES (:PID, :SQ, :SQ1, :DS)
+        """
         
+        params = {
+            'PID': data.PID,
+            'SQ': data.SQ,
+            'SQ1': sq1,
+            'DS': data.DS
+        }
+        cleaned_params = self.clean_params(params)
         with cnxn.connect() as conn:
-            conn.execute(text(sql))
+            conn.execute(text(sql), cleaned_params)
             conn.commit()
         
         return sq1

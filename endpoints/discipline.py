@@ -4,8 +4,11 @@ from models.discipline import ADS_POST_Body, DSP_POST_Body, Discipline_POST_Body
 from models.auth import BaseResponse
 from services.discipline_service import DisciplineService
 from dependencies import get_auth
+import logging
+import traceback
 
 router = APIRouter()
+logger = logging.getLogger(__name__)
 
 def get_discipline_service():
     return DisciplineService()
@@ -21,6 +24,8 @@ async def get_next_ADS_IID(
         next_iid = service.get_next_ads_iid()
         return next_iid
     except Exception as e:
+        logger.error(f"Error in get_next_ADS_IID: {e}")
+        logger.error(traceback.format_exc())
         return JSONResponse(content={"error": f"{e}"}, status_code=500)
 
 @router.post("/ADS/", response_model=ADS_RESPONSE)
@@ -45,6 +50,8 @@ async def insert_ADS_row(
         return JSONResponse(content=content, status_code=200)
      
     except Exception as e:
+        logger.error(f"Error in insert_ADS_row for PID {data.PID}: {e}")
+        logger.error(traceback.format_exc())
         content = {"error": f"{e}"}
         return JSONResponse(content=content, status_code=500)
 
@@ -67,6 +74,8 @@ async def insert_DSP_row(
         return JSONResponse(content=content, status_code=200)
      
     except Exception as e:
+        logger.error(f"Error in insert_DSP_row for PID {data.PID}: {e}")
+        logger.error(traceback.format_exc())
         content = {"error": f"{e}"}
         return JSONResponse(content=content, status_code=500)
 
@@ -93,5 +102,7 @@ async def insert_discipline_record(
         return JSONResponse(content=content, status_code=200)
     
     except Exception as e:
+        logger.error(f"Error in insert_discipline_record for PID {data.PID}: {e}")
+        logger.error(traceback.format_exc())
         content = {"error": f"{e}"}
         return JSONResponse(content=content, status_code=500)

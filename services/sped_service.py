@@ -1,6 +1,6 @@
 import tempfile
 import shutil
-import PyPDF2
+from pypdf import PdfReader, PdfWriter
 import re
 import os
 from typing import List, Dict
@@ -184,7 +184,7 @@ class SPEDService:
         os.makedirs(output_dir, exist_ok=True)
         
         with open(input_pdf_path, "rb") as file:
-            reader = PyPDF2.PdfReader(file)
+            reader = PdfReader(file)
             total_pages = len(reader.pages)
             
             header_pattern = r"MID ALAMEDA COUNTY SELPA\s+IEP AT A GLANCE"
@@ -225,7 +225,7 @@ class SPEDService:
             
             extracted_docs = []
             for i, doc in enumerate(doc_boundaries):
-                writer = PyPDF2.PdfWriter()
+                writer = PdfWriter()
                 
                 end_page = doc_boundaries[i+1]["start_page"] if i < len(doc_boundaries) - 1 else total_pages
                 

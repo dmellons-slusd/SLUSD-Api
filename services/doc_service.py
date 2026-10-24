@@ -1,6 +1,6 @@
 import tempfile
 import shutil
-import PyPDF2
+from pypdf import PdfReader, PdfWriter
 import re
 import os
 from typing import List, Dict, Optional, Tuple
@@ -135,7 +135,7 @@ class DocService:
         os.makedirs(output_dir, exist_ok=True)
         
         with open(input_pdf_path, "rb") as file:
-            reader = PyPDF2.PdfReader(file)
+            reader = PdfReader(file)
             total_pages = len(reader.pages)
             
             # Document type patterns for reclassification paperwork
@@ -254,7 +254,7 @@ class DocService:
                 if not doc_info['pages']:
                     continue
                 
-                writer = PyPDF2.PdfWriter()
+                writer = PdfWriter()
                 
                 # Sort pages and add to writer
                 sorted_pages = sorted(doc_info['pages'])

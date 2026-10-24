@@ -87,19 +87,17 @@ class SUIAService:
         old_row['DTS'] = old_row['DTS'].dt.strftime('%Y-%m-%d %H:%M:%S')
         old_row_dict = old_row.to_dict('records')[0]
         
-        # Create update statement
-        updates = self._create_sql_update(body, ignore_keys=['ID', 'SQ', 'DEL', 'DTS'])
-        update_sql = self.sql_obj.update_SUIA.format(
-            updates=updates, 
-            sq=body.SQ, 
-            id=body.ID
-        )
+        # Create a parameterized update statement (values are bound, never interpolated)
+        set_clause, params = self._create_sql_update(body, ignore_keys=['ID', 'SQ', 'DEL', 'DTS'])
+        update_sql = text(f"UPDATE SUIA {set_clause} WHERE ID = :_id AND SQ = :_sq")
+        params.update({"_id": body.ID, "_sq": body.SQ})
         
         with cnxn.connect() as conn:
-            conn.execute(text(update_sql))
+            conn.execute(update_sql, params)
             conn.commit()
         
-        return True, f'Updated row ID={body.ID} SQ={body.SQ} with values {updates}', old_row_dict
+        changed = {k: v for k, v in params.items() if not k.startswith('_')}
+        return True, f'Updated row ID={body.ID} SQ={body.SQ} with values {changed}', old_row_dict
     
     def delete_record(self, body: SUIADelete) -> Tuple[bool, str]:
         """
@@ -129,15 +127,24 @@ class SUIAService:
             return 1
         return data.sq.values[0] + 1
     
-    def _create_sql_update(self, body: SUIAUpdate, ignore_keys: List[str] = ['ID', 'SQ', 'DEL', 'DTS']) -> str:
-        """Create a SQL update statement from a dictionary of key-value pairs"""
-        statements = []
-        now = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+    def _create_sql_update(self, body: SUIAUpdate, ignore_keys: List[str] = ['ID', 'SQ', 'DEL', 'DTS']) -> Tuple[str, Dict]:
+        """
+        Build a parameterized SET clause from a model's populated fields.
+
+        Column names come from the Pydantic model's field names (trusted); values are
+        returned as bind parameters so they are never interpolated into the SQL text.
+        Returns: (set_clause, params)
+        """
+        assignments = []
+        params: Dict = {}
         
         for key, value in body:
             if key in ignore_keys or value is None: 
                 continue
-            statement = f"{key} = '{value}'"
-            statements.append(statement)
+            assignments.append(f"{key} = :{key}")
+            params[key] = value
         
-        return f"SET {', '.join(statements)} , DTS ='{now}'"
+        assignments.append("DTS = :DTS")
+        params["DTS"] = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+        
+        return f"SET {', '.join(assignments)}", params

@@ -1,8 +1,9 @@
 from fastapi import Depends, HTTPException, status
 from fastapi.security import OAuth2PasswordBearer
-from jose import JWTError, jwt
+import jwt
+from jwt import InvalidTokenError
 from passlib.context import CryptContext
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from typing import Union
 from config import get_settings
 from models.auth import User, UserInDB, TokenData
@@ -39,9 +40,9 @@ def create_access_token(data: dict, expires_delta: Union[timedelta, None] = None
     """Create a JWT token from the given data with an optional expiration time"""
     to_encode = data.copy()
     if expires_delta: 
-        expire = datetime.utcnow() + expires_delta
+        expire = datetime.now(timezone.utc) + expires_delta
     else:
-        expire = datetime.utcnow() + timedelta(minutes=15)
+        expire = datetime.now(timezone.utc) + timedelta(minutes=15)
     to_encode.update({"exp": expire})
     encoded_jwt = jwt.encode(to_encode, settings.SECRET_KEY, algorithm=settings.ALGORITHM)
     return encoded_jwt
@@ -60,7 +61,7 @@ async def get_auth(token: str = Depends(oauth_2_scheme)):
         if username is None:
             raise credential_exception
         token_data = TokenData(username=username)
-    except JWTError:
+    except InvalidTokenError:
         raise credential_exception
     
     user = get_user(db, username=token_data.username)

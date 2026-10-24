@@ -4,9 +4,11 @@ from typing import Optional
 from models.doc import DocumentUploadResponse, GeneralDocumentUpload
 from services.doc_service import DocService
 from dependencies import get_auth
+from config import get_settings
 from slusdlib import core
 
 router = APIRouter()
+settings = get_settings()
 
 def get_doc_service():
     return DocService()
@@ -35,6 +37,12 @@ async def upload_reclassification_documents(
     try:
         # Read uploaded file content
         file_content = await file.read()
+        max_bytes = settings.MAX_DOCUMENT_SIZE_MB * 1024 * 1024
+        if len(file_content) > max_bytes:
+            return JSONResponse(
+                content={"status": "ERROR", "message": f"File exceeds the {settings.MAX_DOCUMENT_SIZE_MB} MB upload limit"},
+                status_code=413
+            )
         core.log('~' * 80)
         core.log(f"Received reclassification file: {file.filename} ({len(file_content)} bytes)")
         
@@ -49,7 +57,7 @@ async def upload_reclassification_documents(
             status_code = 207  # Multi-status for partial success
         
         return JSONResponse(
-            content=response.dict(),
+            content=response.model_dump(),
             status_code=status_code
         )
         
@@ -90,6 +98,12 @@ async def upload_general_document(
     try:
         # Read uploaded file content
         file_content = await file.read()
+        max_bytes = settings.MAX_DOCUMENT_SIZE_MB * 1024 * 1024
+        if len(file_content) > max_bytes:
+            return JSONResponse(
+                content={"status": "ERROR", "message": f"File exceeds the {settings.MAX_DOCUMENT_SIZE_MB} MB upload limit"},
+                status_code=413
+            )
         core.log('~' * 80)
         core.log(f"Received general document: {file.filename} ({len(file_content)} bytes) for student {student_id}")
         
@@ -109,7 +123,7 @@ async def upload_general_document(
             status_code = 500 if "Error uploading" in response.message else 400
         
         return JSONResponse(
-            content=response.dict(),
+            content=response.model_dump(),
             status_code=status_code
         )
         

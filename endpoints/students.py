@@ -50,7 +50,7 @@ async def search_students(
     """
     try:
         response = service.search_students(search_request)
-        return JSONResponse(content=response.dict(), status_code=200)
+        return JSONResponse(content=response.model_dump(), status_code=200)
         
     except Exception as e:
         error_response = StudentLookupResponse(
@@ -59,7 +59,7 @@ async def search_students(
             total_matches=0,
             matches=[]
         )
-        return JSONResponse(content=error_response.dict(), status_code=500)
+        return JSONResponse(content=error_response.model_dump(), status_code=500)
 
 @router.get("/{student_id}/details/")
 async def get_student_details(

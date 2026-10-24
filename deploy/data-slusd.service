@@ -1,0 +1,21 @@
+# Install: sudo cp deploy/data-slusd.service /etc/systemd/system/data-slusd.service && sudo systemctl daemon-reload && sudo systemctl restart data-slusd
+[Unit]
+Description=Data SLUSD Next.js Application
+After=network.target
+
+[Service]
+Type=simple
+User=administrator
+WorkingDirectory=/home/administrator/data-slusd
+ExecStart=/home/administrator/.nvm/versions/node/v22.23.4/bin/npm start
+Restart=on-failure
+RestartSec=10
+StandardOutput=syslog
+StandardError=syslog
+SyslogIdentifier=data-slusd
+Environment=NODE_ENV=production
+Environment=PORT=3000
+Environment=PATH=/home/administrator/.nvm/versions/node/v22.23.4/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
+
+[Install]
+WantedBy=multi-user.target

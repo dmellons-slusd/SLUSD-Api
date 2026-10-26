@@ -502,7 +502,15 @@ class DocService:
             }
             
             # Upload to Aeries
-            errors = self._upload_single_doc_to_aeries(cnxn, doc_info, document_type, test_run)
+            # TY column is limited to 4 characters in the DOC table
+            ty_codes = {
+                "RFEP_MONITORING": "LAC",
+                "RECLASS": "LAC",
+                "IEP": "PGM",
+                "GENERAL": "",
+            }
+            ty_value = ty_codes.get(document_type, document_type[:4])
+            errors = self._upload_single_doc_to_aeries(cnxn, doc_info, document_type, test_run, ty_value=ty_value)
             
             formatted_doc = DocumentInfo(
                 file=filename,
@@ -543,8 +551,9 @@ class DocService:
         """Upload a single document to Aeries"""
         category_codes = {
             "RECLASS": "06",
+            "RFEP_MONITORING": "06",
             "IEP": "11",
-            "GENERAL": "99"
+            "GENERAL": "99",
         }
         
         category_code = category_codes.get(document_type, "99")
@@ -553,26 +562,29 @@ class DocService:
         
         try:
             student_id = int(doc_info['stu_id'])
-            
+
+            core.log(f"Uploading {document_type} document for student {student_id} to AERIES...")
+
             # Get student grade
             stu_gr = self._get_student_grade(cnxn, student_id)
-            if not stu_gr:
+            if stu_gr is None or stu_gr == "":
+                core.log(f"Student {student_id} not found in the database, or student is inactive.")
                 return [{
                     "message": f"Student {student_id} not found in the database, or student is inactive.",
                     "stu_id": doc_info['stu_id'],
                     "student_name": doc_info['student_name']
                 }]
-            
+
             # Get next sequence
             next_sq = self._get_next_sq(student_id, 'DOC', cnxn)
-            
+
             # Prepare SQL insert
             sql = text('''INSERT INTO DOC (
                 ID, SQ, DT, GR, CT, NM, XT, RB, SZ, LK, SRC, SCT, TY, UN, IDT
                 ) VALUES (
                 :id, :sq, :dt, :gr, :ct, :nm, :xt, :rb, :sz, :lk, :src, :sct, :ty, :un, :idt
                 )''')
-                
+
             params = {
                 'id': str(student_id),
                 'sq': int(next_sq),
@@ -590,12 +602,17 @@ class DocService:
                 'un': 'Automation',
                 'idt': today
             }
-            
+
+            core.log(f"Inserting DOC record: ID={student_id}, SQ={next_sq}, CT={category_code}, GR={stu_gr}, NM={doc_info['document_type'][:100]}, test_run={test_run}, db={cnxn.url}")
             with cnxn.connect() as conn:
-                conn.execute(sql, params)
+                result = conn.execute(sql, params)
+                core.log(f"Insert rowcount: {result.rowcount}")
                 conn.commit()
-                
+
+            core.log(f"Successfully uploaded document for student {student_id}")
+
         except Exception as e:
+            core.log(f"Error uploading document for student {student_id}: {e}")
             errors.append({
                 "message": f"Error uploading document: {str(e)}",
                 "stu_id": doc_info['stu_id'],

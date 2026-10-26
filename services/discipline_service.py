@@ -65,11 +65,11 @@ class DisciplineService:
         sq1 = self._get_next_dsp_sq(data.PID, data.SQ, cnxn)
         
         # Use parameterized query instead of string formatting
-        sql = """
-        INSERT INTO DSP (PID, SQ, SQ1, DS)
-        VALUES (:PID, :SQ, :SQ1, :DS)
-        """
-        
+        # sql = """
+        # INSERT INTO DSP (PID, SQ, SQ1, DS)
+        # VALUES (:PID, :SQ, :SQ1, :DS)
+        # """
+        sql = self.sql_obj.insert_into_DSP_table
         params = {
             'PID': data.PID,
             'SQ': data.SQ,

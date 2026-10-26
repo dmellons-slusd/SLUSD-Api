@@ -1,12 +1,11 @@
 INSERT INTO DSP (
-    PID,
-    SQ,
-    SQ1,
+    PID, 
+    SQ, 
+    SQ1, 
     DS
-
 ) VALUES (
-    '{PID}',
-    '{SQ}',
-    '{SQ1}',
-    '{DS}'
-) 
+    :PID, 
+    :SQ, 
+    :SQ1, 
+    :DS
+)
